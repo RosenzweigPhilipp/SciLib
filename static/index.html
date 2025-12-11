@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SciLib - AI-Powered Scientific Literature Manager</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-book-open"></i>
+                    <h1>SciLib</h1>
+                </div>
+                <nav class="nav">
+                    <button class="nav-btn active" data-section="dashboard">
+                        <i class="fas fa-tachometer-alt"></i> Dashboard
+                    </button>
+                    <button class="nav-btn" data-section="papers">
+                        <i class="fas fa-file-pdf"></i> Papers
+                    </button>
+                    <button class="nav-btn" data-section="collections">
+                        <i class="fas fa-folder"></i> Collections
+                    </button>
+                    <button class="nav-btn" data-section="tags">
+                        <i class="fas fa-tags"></i> Tags
+                    </button>
+                </nav>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="global-search" placeholder="Search papers...">
+                    </div>
+                    <button class="upload-btn" id="upload-btn">
+                        <i class="fas fa-upload"></i> Upload Paper
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="section active">
+                <div class="section-header">
+                    <h2>Dashboard</h2>
+                    <p>Welcome to your SciLib library</p>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="total-papers">0</h3>
+                            <p>Total Papers</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-folder"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="total-collections">0</h3>
+                            <p>Collections</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-tags"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="total-tags">0</h3>
+                            <p>Tags</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="recent-uploads">0</h3>
+                            <p>Recent Uploads</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="recent-papers">
+                    <h3>Recent Papers</h3>
+                    <div id="recent-papers-list" class="papers-list">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No papers uploaded yet. Start by uploading your first paper!</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Papers Section -->
+            <section id="papers" class="section">
+                <div class="section-header">
+                    <h2>Papers</h2>
+                    <div class="section-actions">
+                        <div class="filter-options">
+                            <select id="sort-papers">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="title">By Title</option>
+                                <option value="authors">By Authors</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="add-paper-btn">
+                            <i class="fas fa-plus"></i> Add Paper
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="papers-list" class="papers-list">
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No papers found. Upload your first paper to get started!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Collections Section -->
+            <section id="collections" class="section">
+                <div class="section-header">
+                    <h2>Collections</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" id="add-collection-btn">
+                            <i class="fas fa-plus"></i> New Collection
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="collections-list" class="collections-list">
+                    <div class="empty-state">
+                        <i class="fas fa-folder-open"></i>
+                        <p>No collections created. Create your first collection to organize your papers!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tags Section -->
+            <section id="tags" class="section">
+                <div class="section-header">
+                    <h2>Tags</h2>
+                    <div class="section-actions">
+                        <button class="btn btn-primary" id="add-tag-btn">
+                            <i class="fas fa-plus"></i> New Tag
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="tags-list" class="tags-list">
+                    <div class="empty-state">
+                        <i class="fas fa-tag"></i>
+                        <p>No tags created. Create tags to categorize your papers!</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Upload Modal -->
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Upload Paper</h3>
+                <button class="modal-close" id="upload-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h4>Drag and drop your PDF here</h4>
+                    <p>or click to browse files</p>
+                    <input type="file" id="file-input" accept=".pdf" hidden>
+                    <button class="btn btn-secondary" id="browse-btn">Browse Files</button>
+                </div>
+                <div class="upload-progress" id="upload-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <p class="progress-text">Uploading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collection Modal -->
+    <div id="collection-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="collection-modal-title">New Collection</h3>
+                <button class="modal-close" id="collection-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="collection-form">
+                    <div class="form-group">
+                        <label for="collection-name">Name</label>
+                        <input type="text" id="collection-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="collection-description">Description</label>
+                        <textarea id="collection-description" rows="3"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="collection-cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Collection</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tag Modal -->
+    <div id="tag-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="tag-modal-title">New Tag</h3>
+                <button class="modal-close" id="tag-modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="tag-form">
+                    <div class="form-group">
+                        <label for="tag-name">Name</label>
+                        <input type="text" id="tag-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="tag-color">Color</label>
+                        <div class="color-picker">
+                            <input type="color" id="tag-color" value="#007bff">
+                            <div class="color-preview" id="color-preview"></div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="tag-cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Tag</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paper Details Modal -->
+    <div id="paper-details-modal" class="modal large">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="paper-details-title">Paper Details</h3>
+                <button class="modal-close" id="paper-details-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="paper-details-content">
+                    <!-- Paper details will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div id="notification" class="notification">
+        <div class="notification-content">
+            <i class="notification-icon"></i>
+            <span class="notification-message"></span>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/components.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
