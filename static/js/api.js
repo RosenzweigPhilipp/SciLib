@@ -1,6 +1,6 @@
 // API Configuration
 const API_BASE_URL = '/api';
-const API_KEY = 'your-secret-api-key-here'; // This should match your .env file
+const API_KEY = 'scilib-demo-key-2024'; // This should match your .env file
 
 // API Helper Functions
 class API {
