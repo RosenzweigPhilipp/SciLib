@@ -7,6 +7,7 @@ import time
 from .config import settings
 from .auth import verify_session_token
 from .api import papers, collections, tags
+from .ai import endpoints as ai_endpoints
 
 # Session storage (in production, use Redis or database)
 active_sessions = {}
@@ -33,6 +34,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(papers.router, prefix="/api", dependencies=[Depends(verify_session_token)])
 app.include_router(collections.router, prefix="/api", dependencies=[Depends(verify_session_token)])
 app.include_router(tags.router, prefix="/api", dependencies=[Depends(verify_session_token)])
+app.include_router(ai_endpoints.router, dependencies=[Depends(verify_session_token)])
 
 # Public endpoints (no auth required)
 @app.get("/")
