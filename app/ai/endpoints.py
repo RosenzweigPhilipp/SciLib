@@ -8,8 +8,8 @@ import logging
 import os
 
 from ..database.connection import get_db
-from ..database.models import Paper, User
-from ..auth.dependencies import get_current_user
+from ..database.models import Paper
+from ..auth import verify_session_token
 from .tasks import extract_pdf_metadata_task, get_extraction_status, celery_app
 
 logger = logging.getLogger(__name__)

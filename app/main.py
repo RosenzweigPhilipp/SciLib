@@ -7,7 +7,7 @@ import time
 from .config import settings
 from .auth import verify_session_token
 from .api import papers, collections, tags
-from .ai import endpoints as ai_endpoints
+from .ai import endpoints_simple as ai_endpoints
 
 # Session storage (in production, use Redis or database)
 active_sessions = {}
