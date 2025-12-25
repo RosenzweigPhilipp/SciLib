@@ -1,232 +1,151 @@
-# SciLib 📚
+# SciLib - AI-Powered Scientific Literature Manager
 
-An AI-powered scientific literature manager designed for researchers, students, and academics. SciLib combines the organizational capabilities of reference managers like Mendeley or Zotero with modern AI tooling to accelerate literature discovery, comprehension, and cross-paper insight.
+A modern web application for managing and organizing scientific literature with AI integration capabilities.
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+## 🚀 Features
 
-## ✨ Features
+- **Paper Management**: Upload, view, edit, and delete PDF papers
+- **Secure Authentication**: Session-based authentication system (no hardcoded API keys)
+- **Collections & Tags**: Organize papers into collections and tag them
+- **Search & Filter**: Search papers by title, authors, or content
+- **Dashboard**: Overview of your literature collection with statistics
+- **Responsive UI**: Modern, clean interface that works on desktop and mobile
 
-### 📚 Library Management
-- **PDF Upload**: Drag-and-drop interface for easy paper uploads
-- **Smart Organization**: Collections and folders for structured organization  
-- **Custom Tagging**: Color-coded tags for flexible categorization
-- **Full-Text Search**: Search across titles, authors, and abstracts
+## 🛠️ Technology Stack
 
-### 🎯 Current Capabilities (Phase 1)
-- ✅ Upload and store PDF papers with validation
-- ✅ Create and manage collections for organization
-- ✅ Tag papers with custom colored labels
-- ✅ Search and filter papers by metadata
-- ✅ Responsive web interface for all devices
-- ✅ RESTful API with automatic documentation
-
-### 🚀 Coming Soon (Phase 2)
-- 🤖 **AI Insights**: Automated summaries and paper analysis
-- 💬 **RAG Chat**: Ask questions about your research library  
-- 🔗 **Discovery**: Find related papers and recommendations
-- 📊 **Analytics**: Research trends and citation analysis
-
-## 🛠️ Tech Stack
-
-- **Backend**: FastAPI (Python) with async support
+- **Backend**: FastAPI (Python)
 - **Database**: PostgreSQL with SQLAlchemy ORM
-- **Frontend**: Modern HTML5/CSS3/JavaScript (no frameworks)
-- **Authentication**: API key-based security
-- **File Storage**: Local filesystem with configurable paths
-- **Future**: LangChain + LangSmith for AI features
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
+- **Authentication**: JWT-like session tokens
+- **File Upload**: PDF processing and storage
 
-## 🚀 Quick Start
+## ⚡ Quick Start
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- PostgreSQL 12+ (or SQLite for testing)
+- Python 3.8+
+- PostgreSQL
 - Git
 
 ### Installation
 
 1. **Clone the repository**
-```bash
-git clone https://github.com/your-username/SciLib.git
-cd SciLib
-```
+   ```bash
+   git clone https://github.com/RosenzweigPhilipp/SciLib.git
+   cd SciLib
+   ```
 
-2. **Set up Python environment**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+2. **Set up virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+   ```
 
-3. **Configure environment**
-```bash
-cp .env.example .env
-# Edit .env with your database settings
-```
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-4. **Initialize database** (PostgreSQL)
-```bash
-# Create PostgreSQL database first
-createdb scilib_db
-python -m app.database.init_db
-```
+4. **Configure environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database credentials and API key
+   ```
 
-5. **Start the application**
-```bash
-uvicorn app.main:app --reload
-```
+5. **Set up database**
+   ```bash
+   # Create PostgreSQL database
+   createdb scilib_db
+   
+   # The app will auto-create tables on first run
+   ```
 
-6. **Open in browser**
-   - Frontend: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+6. **Run the application**
+   ```bash
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-### Quick Test (SQLite)
+7. **Access the application**
+   - Open http://localhost:8000
+   - Enter your API key from the .env file to login
 
-For testing without PostgreSQL:
-```bash
-python app/main_test.py
-```
+## 🔐 Security
+
+- **No hardcoded secrets**: All sensitive data is stored in environment variables
+- **Session-based auth**: API keys are exchanged for temporary session tokens
+- **Token expiration**: Sessions automatically expire after 24 hours
+- **Secure uploads**: File validation and secure storage
 
 ## 📁 Project Structure
 
 ```
 SciLib/
-├── app/                        # Backend application
-│   ├── api/                   # REST API endpoints
-│   │   ├── papers.py          # Paper management
-│   │   ├── collections.py     # Collection management
-│   │   └── tags.py           # Tag management
-│   ├── database/              # Database layer
-│   │   ├── models.py          # SQLAlchemy models
-│   │   ├── connection.py      # DB connection
-│   │   └── init_db.py         # DB initialization
-│   ├── main.py                # FastAPI app
-│   ├── config.py              # Settings
-│   └── auth.py                # Authentication
-├── static/                    # Frontend assets
-│   ├── css/                   # Stylesheets
-│   ├── js/                    # JavaScript modules
-│   └── index.html             # Main interface
-├── uploads/                   # File storage
-├── requirements.txt           # Python dependencies
-├── .env.example              # Environment template
-└── docs/                     # Documentation
+├── app/
+│   ├── api/              # API route handlers
+│   ├── database/         # Database models and setup
+│   ├── auth.py          # Authentication logic
+│   ├── config.py        # Configuration management
+│   └── main.py          # FastAPI application
+├── static/
+│   ├── css/             # Stylesheets
+│   ├── js/              # JavaScript modules
+│   └── index.html       # Main frontend
+├── uploads/             # PDF file storage (gitignored)
+├── requirements.txt     # Python dependencies
+├── .env.example        # Environment template
+└── README.md           # This file
 ```
 
-## 🔌 API Usage
+## 🔑 Configuration
 
-All endpoints require API key authentication:
+Edit `.env` file with your settings:
 
-```bash
-curl -H "Authorization: Bearer your-api-key" \
-     http://localhost:8000/api/papers
+```env
+# Database
+DATABASE_URL=postgresql://username:password@localhost/scilib_db
+
+# Security
+API_KEY=your-secret-api-key-here
+DEBUG=True
+
+# OpenAI (optional, for future AI features)
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Server
+HOST=127.0.0.1
+PORT=8000
+
+# Upload settings
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE=50000000
 ```
 
-### Key Endpoints
+## 🚧 Development Status
 
-- `POST /api/papers/upload` - Upload PDF paper
-- `GET /api/papers` - List papers with search/pagination
-- `POST /api/collections` - Create collection
-- `POST /api/tags` - Create tag
-- `GET /docs` - Interactive API documentation
+**Current Phase**: Core Infrastructure Complete ✅
 
-## 🎨 Screenshots
+- ✅ Backend API with FastAPI
+- ✅ Database models and relationships  
+- ✅ File upload system
+- ✅ Frontend interface with CRUD operations
+- ✅ Session-based authentication
+- ✅ Paper, collection, and tag management
 
-### Dashboard
-Modern, clean interface showing library statistics and recent papers.
+**Next Phase**: AI Integration 🔄
 
-### Paper Upload
-Intuitive drag-and-drop interface with progress indication.
-
-### Library Management
-Organized view with search, filtering, and batch operations.
-
-## 🔄 Development Workflow
-
-This project follows a structured development approach:
-
-### Branching Strategy
-- `main` - Production-ready code
-- `feature/backend-setup` - Backend infrastructure  
-- `feature/database-setup` - Database implementation
-- `feature/frontend-init` - Frontend development
-- `feature/ai-integration` - AI features (Phase 2)
-
-### Commit Conventions
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `docs:` - Documentation updates
-- `style:` - Code formatting
-- `refactor:` - Code restructuring
+- 🔄 PDF metadata extraction
+- 🔄 Semantic search capabilities
+- 🔄 AI-powered paper summarization
+- 🔄 Citation network analysis
 
 ## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit changes**: `git commit -m 'feat: add amazing feature'`
-4. **Push to branch**: `git push origin feature/amazing-feature`
-5. **Open Pull Request**
+This project was developed as part of an AI engineering course. Contributions and suggestions are welcome!
 
-### Development Setup
-```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
+## 📄 License
 
-# Run tests
-pytest
-
-# Code formatting
-black app/ && isort app/
-
-# Type checking
-mypy app/
-```
-
-## 📊 Current Status
-
-**Phase 1: ✅ Complete**
-- Backend API with FastAPI
-- Database models and CRUD operations
-- Frontend interface with modern design
-- File upload and management
-- Search and organization features
-
-**Phase 2: 🚧 Planned**
-- AI-powered document analysis
-- Semantic search with embeddings
-- Chat interface for Q&A
-- Automated insights and summaries
-
-## 📄 Documentation
-
-- [Setup Guide](SETUP.md) - Detailed installation instructions
-- [Project Outline](PROJECT_OUTLINE.md) - Architecture and planning
-- [Development Summary](DEVELOPMENT_SUMMARY.md) - Progress tracking
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs
-
-## 🐛 Troubleshooting
-
-**Database Issues**
-```bash
-# Check PostgreSQL status
-pg_isready
-
-# Reset database
-dropdb scilib_db && createdb scilib_db
-python -m app.database.init_db
-```
-
-**Port Conflicts**
-```bash
-# Use different port
-uvicorn app.main:app --port 8001
-```
-
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is for educational purposes as part of an AI engineering course.
 
 ---
+
+**Built with ❤️ for the AI engineering community**
