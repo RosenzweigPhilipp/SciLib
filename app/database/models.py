@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Table, Float, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .connection import Base
@@ -34,6 +34,14 @@ class Paper(Base):
     file_path = Column(String(500), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # AI Extraction fields
+    extraction_status = Column(String(50), default="pending", index=True)  # pending, processing, completed, failed
+    extraction_confidence = Column(Float, default=0.0)  # 0.0 to 1.0
+    extraction_sources = Column(JSON, default=dict)  # Which APIs provided data
+    extraction_metadata = Column(JSON, default=dict)  # Raw extraction results
+    extracted_at = Column(DateTime(timezone=True))
+    manual_override = Column(Boolean, default=False)  # User can override AI extraction
     
     # Relationships
     collections = relationship("Collection", secondary=paper_collections, back_populates="papers")

@@ -1,0 +1,1 @@
+"""AI tools for scientific APIs and web search."""

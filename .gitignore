@@ -82,3 +82,7 @@ uploads/
 # Temporary files
 *.tmp
 *.temp
+
+
+/minimals
+/minimals/*
