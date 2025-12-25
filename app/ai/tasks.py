@@ -12,7 +12,7 @@ except ImportError:
     # Handle case where Celery is not installed yet
     Celery = None
 
-from ..agents.metadata_pipeline import MetadataExtractionPipeline
+from .agents.metadata_pipeline import MetadataExtractionPipeline
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

@@ -1,7 +1,7 @@
 """
 LangChain tool wrappers for metadata search functionality.
 """
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 from typing import Dict, Any, Optional
 from pydantic import Field
 import json

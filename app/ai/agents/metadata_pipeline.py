@@ -1,25 +1,31 @@
 """
-LangChain agents for scientific paper metadata extraction pipeline.
+Direct LLM-based metadata extraction pipeline for scientific papers.
+Simplified approach without complex agent frameworks.
 """
-from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.tools import BaseTool
+from langchain_core.prompts import ChatPromptTemplate
 from typing import Dict, List, Optional, Any
 import json
 import logging
+import asyncio
+
+# Import our extraction tools
+from ..extractors.pdf_extractor import PDFExtractor
+from ..tools.scientific_apis import CrossRefTool, ArxivTool, SemanticScholarTool
+from ..tools.exa_search import ExaSearchTool
 
 logger = logging.getLogger(__name__)
 
 
 class MetadataExtractionPipeline:
     """
-    Orchestrates the multi-agent pipeline for PDF metadata extraction.
+    Simplified metadata extraction pipeline using direct LLM calls.
     
     Pipeline:
-    1. PDF Extraction Agent -> Extract text/metadata from PDF
-    2. Metadata Search Agent -> Find additional metadata via APIs/web search  
-    3. Validation Agent -> Validate and merge results
+    1. PDF Content Extraction -> Extract text/metadata from PDF
+    2. LLM Analysis -> Analyze content and extract structured metadata  
+    3. API Search & Validation -> Search databases and validate results
+    4. Final Processing -> Merge, validate, and generate BibTeX
     """
     
     def __init__(self, 
@@ -34,17 +40,19 @@ class MetadataExtractionPipeline:
             temperature=0.1  # Low temperature for consistent extraction
         )
         
-        # Initialize tools
-        self.pdf_tools = self._create_pdf_tools()
-        self.search_tools = self._create_search_tools(
-            exa_api_key, crossref_email, semantic_scholar_key
-        )
-        self.validation_tools = self._create_validation_tools()
+        # Initialize extraction tools
+        self.pdf_extractor = PDFExtractor()
+        self.crossref_tool = CrossRefTool(email=crossref_email)
+        self.arxiv_tool = ArxivTool()
         
-        # Create agents
-        self.pdf_agent = self._create_pdf_agent()
-        self.search_agent = self._create_search_agent()  
-        self.validation_agent = self._create_validation_agent()
+        # Optional tools
+        self.semantic_scholar_tool = None
+        if semantic_scholar_key:
+            self.semantic_scholar_tool = SemanticScholarTool(api_key=semantic_scholar_key)
+        
+        self.exa_tool = None
+        if exa_api_key:
+            self.exa_tool = ExaSearchTool(api_key=exa_api_key)
     
     async def extract_metadata(self, pdf_path: str, paper_id: int) -> Dict:
         """
@@ -70,7 +78,7 @@ class MetadataExtractionPipeline:
         try:
             # Step 1: PDF Content Extraction
             logger.info(f"Starting PDF extraction for paper {paper_id}")
-            pdf_result = await self._run_pdf_extraction(pdf_path)
+            pdf_result = await self.pdf_extractor.extract_content(pdf_path)
             pipeline_result["sources"].append("pdf_extraction")
             
             if not pdf_result.get("text"):
@@ -78,24 +86,30 @@ class MetadataExtractionPipeline:
                 pipeline_result["extraction_status"] = "failed"
                 return pipeline_result
             
-            # Step 2: Metadata Search & Enrichment
-            logger.info(f"Starting metadata search for paper {paper_id}")
-            search_result = await self._run_metadata_search(pdf_result)
-            pipeline_result["sources"].extend(search_result.get("sources", []))
+            # Step 2: LLM Analysis of PDF Content
+            logger.info(f"Starting LLM analysis for paper {paper_id}")
+            llm_metadata = await self._analyze_pdf_content(pdf_result)
             
-            # Step 3: Validation & Merging
+            # Step 3: Search Scientific Databases
+            logger.info(f"Starting database search for paper {paper_id}")
+            search_results = await self._search_scientific_databases(llm_metadata)
+            pipeline_result["sources"].extend(search_results.get("sources", []))
+            
+            # Step 4: Merge and Validate Results
             logger.info(f"Starting validation for paper {paper_id}")
-            validation_result = await self._run_validation(pdf_result, search_result)
+            final_metadata = await self._merge_and_validate(llm_metadata, search_results)
             
-            # Compile final result
+            # Calculate final confidence
+            confidence = self._calculate_confidence(final_metadata, search_results)
+            
             pipeline_result.update({
                 "extraction_status": "completed",
-                "confidence": validation_result.get("confidence", 0.0),
-                "metadata": validation_result.get("metadata", {}),
-                "sources": list(set(pipeline_result["sources"] + validation_result.get("sources", [])))
+                "confidence": confidence,
+                "metadata": final_metadata,
+                "sources": list(set(pipeline_result["sources"]))
             })
             
-            logger.info(f"Pipeline completed for paper {paper_id} with confidence {pipeline_result['confidence']}")
+            logger.info(f"Pipeline completed for paper {paper_id} with confidence {confidence}")
             
         except Exception as e:
             logger.error(f"Pipeline failed for paper {paper_id}: {e}")
@@ -106,137 +120,320 @@ class MetadataExtractionPipeline:
         
         return pipeline_result
     
-    async def _run_pdf_extraction(self, pdf_path: str) -> Dict:
-        """Run PDF extraction agent."""
+    async def _analyze_pdf_content(self, pdf_result: Dict) -> Dict:
+        """Use LLM to analyze PDF content and extract structured metadata."""
+        
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert PDF analysis agent. Your job is to extract and analyze content from academic papers.
+            ("system", """You are an expert at extracting bibliographic metadata from academic papers. 
+Analyze the provided PDF text and extract the following information in JSON format:
 
-Extract the following information from the PDF:
-1. Title (exact title of the paper)
-2. Authors (full author list)
-3. Abstract (if available)
-4. Year/Publication date
-5. Journal/Conference name
-6. DOI (if present)
-7. Keywords (if available)
+{
+  "title": "exact paper title",
+  "authors": "full author list", 
+  "abstract": "paper abstract if available",
+  "year": "publication year",
+  "journal": "journal or conference name",
+  "doi": "DOI if present",
+  "keywords": "keywords if available",
+  "confidence": 0.8
+}
 
-Return results in JSON format with confidence scores for each field.
-Be precise and only extract information you are confident about.
-"""),
-            ("human", "Analyze this PDF and extract academic paper metadata: {pdf_path}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
+Be precise and only include information you are confident about. 
+Set confidence between 0.0 and 1.0 based on text quality and extraction certainty.
+If information is not clearly available, use null for that field."""),
+            ("human", "Extract metadata from this PDF text:\n\n{pdf_text}")
         ])
         
-        agent = create_openai_tools_agent(self.llm, self.pdf_tools, prompt)
-        agent_executor = AgentExecutor(agent=agent, tools=self.pdf_tools, verbose=True)
-        
-        result = await agent_executor.ainvoke({"pdf_path": pdf_path})
-        return result
+        try:
+            response = await self.llm.ainvoke(prompt.format_messages(
+                pdf_text=pdf_result.get("text", "")[:8000]  # Limit to ~8k chars
+            ))
+            
+            # Parse JSON response
+            metadata = json.loads(response.content)
+            
+            # Adjust confidence based on PDF extraction quality
+            pdf_confidence = pdf_result.get("confidence", 0.5)
+            llm_confidence = metadata.get("confidence", 0.5)
+            combined_confidence = (pdf_confidence + llm_confidence) / 2
+            metadata["confidence"] = combined_confidence
+            
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"LLM analysis failed: {e}")
+            return {
+                "title": None,
+                "authors": None, 
+                "abstract": None,
+                "year": None,
+                "journal": None,
+                "doi": None,
+                "keywords": None,
+                "confidence": 0.2,
+                "error": str(e)
+            }
     
-    async def _run_metadata_search(self, pdf_result: Dict) -> Dict:
-        """Run metadata search agent."""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a metadata search specialist. Use scientific APIs and web search to find complete bibliographic information.
-
-Your goal is to find missing metadata for academic papers using:
-1. CrossRef API for DOI lookup and citation data
-2. ArXiv API for preprint information
-3. Semantic Scholar API for additional metadata
-4. Exa.ai semantic search as fallback
-
-Prioritize official sources over web search. Return comprehensive BibTeX-ready metadata.
-"""),
-            ("human", "Find complete metadata for this paper: {extracted_info}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+    async def _search_scientific_databases(self, llm_metadata: Dict) -> Dict:
+        """Search scientific databases for additional/validation metadata."""
         
-        agent = create_openai_tools_agent(self.llm, self.search_tools, prompt)
-        agent_executor = AgentExecutor(agent=agent, tools=self.search_tools, verbose=True)
+        search_results = {
+            "sources": [],
+            "crossref": None,
+            "arxiv": None,
+            "semantic_scholar": None,
+            "exa": None
+        }
         
-        result = await agent_executor.ainvoke({"extracted_info": json.dumps(pdf_result)})
-        return result
+        # Build search query from LLM metadata
+        title = llm_metadata.get("title")
+        authors = llm_metadata.get("authors")
+        
+        if not title and not authors:
+            return search_results
+        
+        # Search tasks
+        search_tasks = []
+        
+        # CrossRef search
+        if title:
+            search_tasks.append(self._search_crossref(title))
+        
+        # arXiv search  
+        if title:
+            search_tasks.append(self._search_arxiv(title))
+        
+        # Semantic Scholar search
+        if self.semantic_scholar_tool and title:
+            search_tasks.append(self._search_semantic_scholar(title))
+        
+        # Execute searches in parallel
+        try:
+            results = await asyncio.gather(*search_tasks, return_exceptions=True)
+            
+            # Process results
+            idx = 0
+            if title:
+                if not isinstance(results[idx], Exception) and results[idx]:
+                    search_results["crossref"] = results[idx]
+                    search_results["sources"].append("crossref")
+                idx += 1
+                
+                if not isinstance(results[idx], Exception) and results[idx]:
+                    search_results["arxiv"] = results[idx]
+                    search_results["sources"].append("arxiv")
+                idx += 1
+                
+                if self.semantic_scholar_tool:
+                    if not isinstance(results[idx], Exception) and results[idx]:
+                        search_results["semantic_scholar"] = results[idx]
+                        search_results["sources"].append("semantic_scholar")
+                    idx += 1
+            
+        except Exception as e:
+            logger.error(f"Database search failed: {e}")
+        
+        # Fallback to web search if needed
+        if not any(search_results[key] for key in ["crossref", "arxiv", "semantic_scholar"]):
+            if self.exa_tool and title:
+                try:
+                    exa_result = await self._search_exa(title)
+                    if exa_result:
+                        search_results["exa"] = exa_result
+                        search_results["sources"].append("exa")
+                except Exception as e:
+                    logger.error(f"Exa search failed: {e}")
+        
+        return search_results
     
-    async def _run_validation(self, pdf_result: Dict, search_result: Dict) -> Dict:
-        """Run validation agent."""
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a data validation expert. Your job is to merge and validate metadata from multiple sources.
-
-Compare information from:
-1. PDF extraction results
-2. API search results
-
-Rules:
-- Prefer official sources (CrossRef, ArXiv) over web search
-- Cross-validate conflicting information
-- Assign confidence scores based on source reliability
-- Generate complete BibTeX entry
-- Flag any inconsistencies
-
-Return final validated metadata with confidence scores.
-"""),
-            ("human", "Validate and merge these results:\nPDF: {pdf_data}\nSearch: {search_data}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-        
-        agent = create_openai_tools_agent(self.llm, self.validation_tools, prompt)
-        agent_executor = AgentExecutor(agent=agent, tools=self.validation_tools, verbose=True)
-        
-        result = await agent_executor.ainvoke({
-            "pdf_data": json.dumps(pdf_result),
-            "search_data": json.dumps(search_result)
-        })
-        return result
+    async def _search_crossref(self, title: str) -> Optional[Dict]:
+        """Search CrossRef API."""
+        try:
+            result = await self.crossref_tool.search(title)
+            if result and result.get("results"):
+                return result["results"][0]  # Return best match
+        except Exception as e:
+            logger.error(f"CrossRef search failed: {e}")
+        return None
     
-    def _create_pdf_agent(self):
-        """Create PDF extraction agent."""
-        # Will be implemented with the tools
-        pass
+    async def _search_arxiv(self, title: str) -> Optional[Dict]:
+        """Search arXiv API."""
+        try:
+            result = await self.arxiv_tool.search(title)
+            if result and result.get("results"):
+                return result["results"][0]  # Return best match
+        except Exception as e:
+            logger.error(f"arXiv search failed: {e}")
+        return None
     
-    def _create_search_agent(self):
-        """Create metadata search agent."""
-        pass
+    async def _search_semantic_scholar(self, title: str) -> Optional[Dict]:
+        """Search Semantic Scholar API."""
+        try:
+            result = await self.semantic_scholar_tool.search(title)
+            if result and result.get("results"):
+                return result["results"][0]  # Return best match
+        except Exception as e:
+            logger.error(f"Semantic Scholar search failed: {e}")
+        return None
     
-    def _create_validation_agent(self):
-        """Create validation agent."""
-        pass
+    async def _search_exa(self, title: str) -> Optional[Dict]:
+        """Search Exa.ai for fallback."""
+        try:
+            result = await self.exa_tool.search_papers(title)
+            if result and result.get("results"):
+                return result["results"][0]  # Return best match
+        except Exception as e:
+            logger.error(f"Exa search failed: {e}")
+        return None
     
-    def _create_pdf_tools(self) -> List[BaseTool]:
-        """Create tools for PDF content extraction."""
-        from .tools.langchain_pdf_tools import PDFExtractionTool, PDFMetadataTool
+    async def _merge_and_validate(self, llm_metadata: Dict, search_results: Dict) -> Dict:
+        """Merge LLM analysis with search results."""
         
-        return [
-            PDFExtractionTool(),
-            PDFMetadataTool()
-        ]
+        # Start with LLM metadata
+        merged = {
+            "title": llm_metadata.get("title"),
+            "authors": llm_metadata.get("authors"),
+            "abstract": llm_metadata.get("abstract"),
+            "year": llm_metadata.get("year"),
+            "journal": llm_metadata.get("journal"),
+            "doi": llm_metadata.get("doi"),
+            "keywords": llm_metadata.get("keywords"),
+            "url": None,
+            "bibtex_type": "article"
+        }
+        
+        # Merge in search results with priority: CrossRef > Semantic Scholar > arXiv > Exa
+        sources_priority = ["crossref", "semantic_scholar", "arxiv", "exa"]
+        
+        for source in sources_priority:
+            source_data = search_results.get(source)
+            if not source_data:
+                continue
+                
+            # Merge fields, preferring non-null values
+            for field in merged.keys():
+                if field == "bibtex_type":
+                    continue
+                    
+                source_value = self._extract_field_from_source(source_data, field)
+                if source_value and not merged.get(field):
+                    merged[field] = source_value
+                elif source_value and source in ["crossref", "semantic_scholar"]:
+                    # Override with high-quality sources
+                    merged[field] = source_value
+        
+        # Clean and validate fields
+        merged = self._clean_metadata(merged)
+        
+        # Determine BibTeX type
+        merged["bibtex_type"] = self._determine_bibtex_type(merged)
+        
+        return merged
     
-    def _create_search_tools(self, exa_key: Optional[str], crossref_email: Optional[str], 
-                           semantic_scholar_key: Optional[str]) -> List[BaseTool]:
-        """Create tools for metadata search."""
-        from .tools.langchain_search_tools import (
-            CrossRefSearchTool, ArxivSearchTool, SemanticScholarSearchTool, ExaSearchTool
-        )
+    def _extract_field_from_source(self, source_data: Dict, field: str) -> Optional[str]:
+        """Extract field value from source data."""
         
-        tools = [
-            CrossRefSearchTool(email=crossref_email),
-            ArxivSearchTool(),
-        ]
+        # Direct mapping
+        if field in source_data:
+            return str(source_data[field]).strip() if source_data[field] else None
         
-        if semantic_scholar_key:
-            tools.append(SemanticScholarSearchTool(api_key=semantic_scholar_key))
+        # Alternative mappings
+        field_mappings = {
+            "title": ["title", "paper_title"],
+            "authors": ["authors", "author", "creators"],
+            "abstract": ["abstract", "summary"],
+            "year": ["year", "publication_year", "pub_year"],
+            "journal": ["journal", "venue", "container-title"],
+            "doi": ["doi", "DOI"],
+            "keywords": ["keywords", "tags"],
+            "url": ["url", "link", "external_url"]
+        }
         
-        if exa_key:
-            tools.append(ExaSearchTool(api_key=exa_key))
+        for alt_field in field_mappings.get(field, []):
+            if alt_field in source_data and source_data[alt_field]:
+                return str(source_data[alt_field]).strip()
         
-        return tools
+        return None
     
-    def _create_validation_tools(self) -> List[BaseTool]:
-        """Create tools for validation and merging."""
-        from .tools.langchain_validation_tools import (
-            MetadataMergeTool, ConfidenceScoringTool, BibtexGeneratorTool
-        )
+    def _clean_metadata(self, metadata: Dict) -> Dict:
+        """Clean and normalize metadata fields."""
         
-        return [
-            MetadataMergeTool(),
-            ConfidenceScoringTool(),
-            BibtexGeneratorTool()
-        ]
+        # Clean title
+        if metadata.get("title"):
+            title = metadata["title"].strip()
+            # Remove trailing periods, normalize whitespace
+            title = title.rstrip(".")
+            metadata["title"] = " ".join(title.split())
+        
+        # Clean authors  
+        if metadata.get("authors"):
+            authors = metadata["authors"]
+            if isinstance(authors, list):
+                metadata["authors"] = "; ".join(str(a).strip() for a in authors if a)
+            else:
+                metadata["authors"] = str(authors).strip()
+        
+        # Clean year
+        if metadata.get("year"):
+            import re
+            year_match = re.search(r'\b(19|20)\d{2}\b', str(metadata["year"]))
+            if year_match:
+                metadata["year"] = year_match.group()
+        
+        # Clean DOI
+        if metadata.get("doi"):
+            doi = str(metadata["doi"]).strip()
+            # Remove doi: prefix
+            doi = re.sub(r'^(doi:?\s*)', '', doi, flags=re.IGNORECASE)
+            metadata["doi"] = doi
+        
+        return metadata
+    
+    def _determine_bibtex_type(self, metadata: Dict) -> str:
+        """Determine BibTeX entry type."""
+        
+        journal = metadata.get("journal", "").lower()
+        
+        # Conference patterns
+        if any(pattern in journal for pattern in [
+            "conference", "proceedings", "workshop", "symposium", "ieee", "acm"
+        ]):
+            return "inproceedings"
+        
+        # arXiv preprints
+        if "arxiv" in journal or (metadata.get("url", "").find("arxiv") != -1):
+            return "misc"
+        
+        return "article"
+    
+    def _calculate_confidence(self, metadata: Dict, search_results: Dict) -> float:
+        """Calculate overall confidence score."""
+        
+        confidence = 0.0
+        
+        # Base confidence from metadata completeness
+        important_fields = ["title", "authors", "year"]
+        present_important = sum(1 for field in important_fields if metadata.get(field))
+        confidence += (present_important / len(important_fields)) * 0.4
+        
+        # Bonus for additional fields
+        bonus_fields = ["doi", "journal", "abstract"]
+        present_bonus = sum(1 for field in bonus_fields if metadata.get(field))
+        confidence += (present_bonus / len(bonus_fields)) * 0.2
+        
+        # Source reliability bonus
+        if search_results.get("crossref"):
+            confidence += 0.2
+        elif search_results.get("semantic_scholar"):
+            confidence += 0.15
+        elif search_results.get("arxiv"):
+            confidence += 0.1
+        elif search_results.get("exa"):
+            confidence += 0.05
+        
+        # Cross-validation bonus
+        sources_count = len([s for s in search_results.get("sources", []) if s])
+        if sources_count > 1:
+            confidence += min(sources_count * 0.05, 0.2)
+        
+        return min(confidence, 1.0)
