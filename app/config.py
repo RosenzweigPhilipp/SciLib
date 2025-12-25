@@ -8,10 +8,11 @@ class Settings(BaseSettings):
     
     # API
     api_key: str = "your-secret-api-key-here"
+    openai_api_key: Optional[str] = None
     debug: bool = True
     
     # Server
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
     
     # File Upload

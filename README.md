@@ -224,38 +224,9 @@ python -m app.database.init_db
 uvicorn app.main:app --port 8001
 ```
 
-## 🔮 Future Roadmap
-
-### Phase 2: AI Integration (Q1 2024)
-- [ ] Document text extraction and parsing
-- [ ] LangChain integration for summarization
-- [ ] Vector database for semantic search
-- [ ] Chat interface for document Q&A
-
-### Phase 3: Advanced Features (Q2 2024)
-- [ ] Related paper recommendations
-- [ ] Author profiling and networks
-- [ ] Citation analysis and trends
-- [ ] Export capabilities (BibTeX, etc.)
-
-### Phase 4: Collaboration (Q3 2024)
-- [ ] Multi-user support
-- [ ] Shared libraries and annotations
-- [ ] Real-time collaboration features
-- [ ] Mobile application
 
 ## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙋‍♂️ Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-username/SciLib/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/SciLib/discussions)
-- **Email**: your-email@example.com
-
 ---
-
-**Built with ❤️ for the research community**
-
-*SciLib - Accelerating literature discovery, comprehension, and insight*

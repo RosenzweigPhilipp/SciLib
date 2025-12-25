@@ -47,13 +47,13 @@ class UIComponents {
                     ${paper.journal ? `<span class="journal">${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
                 </div>
                 <div class="paper-actions">
-                    <button class="action-btn" onclick="PaperManager.showPaperDetails(${paper.id})" title="View Details">
+                    <button class="action-btn view-btn" data-paper-id="${paper.id}" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button class="action-btn" onclick="PaperManager.editPaper(${paper.id})" title="Edit">
+                    <button class="action-btn edit-btn" data-paper-id="${paper.id}" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="action-btn" onclick="PaperManager.deletePaper(${paper.id})" title="Delete">
+                    <button class="action-btn delete-btn" data-paper-id="${paper.id}" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>

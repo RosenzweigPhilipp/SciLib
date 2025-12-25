@@ -8,6 +8,30 @@ class App {
     init() {
         this.setupEventListeners();
         this.setupModals();
+        this.checkAuthentication();
+    }
+    
+    checkAuthentication() {
+        const token = SessionManager.getToken();
+        if (!token) {
+            this.showLoginModal();
+        } else {
+            this.initializeManagers();
+            this.showSection('dashboard');
+        }
+    }
+    
+    showLoginModal() {
+        UIComponents.showModal('login-modal');
+        // Hide main content until authenticated
+        document.querySelector('.main').style.display = 'none';
+        document.querySelector('.header').style.display = 'none';
+    }
+    
+    onLoginSuccess() {
+        UIComponents.hideModal('login-modal');
+        document.querySelector('.main').style.display = 'block';
+        document.querySelector('.header').style.display = 'block';
         this.initializeManagers();
         this.showSection('dashboard');
     }
@@ -43,6 +67,43 @@ class App {
         document.getElementById('global-search').addEventListener('input', (e) => {
             this.handleGlobalSearch(e.target.value);
         });
+
+        // Login form
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.handleLogin();
+        });
+
+        // Logout button
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            this.handleLogout();
+        });
+    }
+    
+    async handleLogin() {
+        const apiKey = document.getElementById('api-key-input').value.trim();
+        if (!apiKey) {
+            UIComponents.showNotification('Please enter an API key', 'error');
+            return;
+        }
+        
+        try {
+            await SessionManager.login(apiKey);
+            UIComponents.showNotification('Login successful!', 'success');
+            this.onLoginSuccess();
+        } catch (error) {
+            console.error('Login error:', error);
+            UIComponents.showNotification('Invalid API key', 'error');
+        }
+    }
+    
+    handleLogout() {
+        SessionManager.clearToken();
+        UIComponents.showNotification('Logged out successfully', 'success');
+        // Reset form
+        document.getElementById('api-key-input').value = '';
+        // Show login modal again
+        this.showLoginModal();
     }
 
     setupModals() {
@@ -139,27 +200,28 @@ class DashboardManager {
 
     async loadStats() {
         try {
-            const [papers, collections, tags] = await Promise.all([
-                API.papers.list({ limit: 1000 }),
-                API.collections.list(),
-                API.tags.list()
-            ]);
+            // Use the new stats endpoint that doesn't require authentication
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
 
-            document.getElementById('total-papers').textContent = papers.length;
-            document.getElementById('total-collections').textContent = collections.length;
-            document.getElementById('total-tags').textContent = tags.length;
+            document.getElementById('total-papers').textContent = stats.total_papers || 0;
+            document.getElementById('total-collections').textContent = stats.total_collections || 0;
+            document.getElementById('total-tags').textContent = stats.total_tags || 0;
+            document.getElementById('recent-uploads').textContent = stats.recent_uploads || 0;
 
-            // Calculate recent uploads (last 30 days)
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const recentCount = papers.filter(paper => 
-                new Date(paper.created_at) > thirtyDaysAgo
-            ).length;
-            document.getElementById('recent-uploads').textContent = recentCount;
+            if (stats.error) {
+                console.warn('Stats API returned error:', stats.error);
+            }
 
         } catch (error) {
             console.error('Error loading dashboard stats:', error);
             UIComponents.showNotification('Failed to load dashboard statistics', 'error');
+            
+            // Set default values on error
+            document.getElementById('total-papers').textContent = '0';
+            document.getElementById('total-collections').textContent = '0';
+            document.getElementById('total-tags').textContent = '0';
+            document.getElementById('recent-uploads').textContent = '0';
         }
     }
 
@@ -192,6 +254,7 @@ class DashboardManager {
 class PaperManager {
     constructor() {
         this.papers = [];
+        this.currentEditingId = null;
         this.setupPaperHandlers();
     }
 
@@ -199,6 +262,34 @@ class PaperManager {
         // Sort papers
         document.getElementById('sort-papers').addEventListener('change', (e) => {
             this.sortPapers(e.target.value);
+        });
+
+        // Paper edit form
+        document.getElementById('paper-edit-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.savePaper();
+        });
+
+        // Paper edit cancel
+        document.getElementById('paper-edit-cancel').addEventListener('click', () => {
+            UIComponents.hideModal('paper-edit-modal');
+        });
+
+        // Event delegation for paper action buttons
+        document.getElementById('papers-list').addEventListener('click', (e) => {
+            const button = e.target.closest('.action-btn');
+            if (!button) return;
+
+            const paperId = parseInt(button.dataset.paperId);
+            if (!paperId) return;
+
+            if (button.classList.contains('view-btn')) {
+                this.showPaperDetails(paperId);
+            } else if (button.classList.contains('edit-btn')) {
+                this.editPaper(paperId);
+            } else if (button.classList.contains('delete-btn')) {
+                this.deletePaper(paperId);
+            }
         });
     }
 
@@ -306,6 +397,62 @@ class PaperManager {
         } catch (error) {
             console.error('Error loading paper details:', error);
             UIComponents.showNotification('Failed to load paper details', 'error');
+        }
+    }
+
+    async editPaper(paperId) {
+        try {
+            const paper = await API.papers.get(paperId);
+            this.currentEditingId = paperId;
+            
+            // Fill the form with paper data
+            document.getElementById('paper-edit-title-input').value = paper.title || '';
+            document.getElementById('paper-edit-authors').value = paper.authors || '';
+            document.getElementById('paper-edit-year').value = paper.year || '';
+            document.getElementById('paper-edit-journal').value = paper.journal || '';
+            document.getElementById('paper-edit-doi').value = paper.doi || '';
+            document.getElementById('paper-edit-abstract').value = paper.abstract || '';
+            document.getElementById('paper-edit-keywords').value = paper.keywords || '';
+            
+            UIComponents.showModal('paper-edit-modal');
+        } catch (error) {
+            console.error('Error loading paper for editing:', error);
+            UIComponents.showNotification('Failed to load paper details', 'error');
+        }
+    }
+
+    async savePaper() {
+        const title = document.getElementById('paper-edit-title-input').value.trim();
+        const authors = document.getElementById('paper-edit-authors').value.trim();
+
+        if (!title || !authors) {
+            UIComponents.showNotification('Title and authors are required', 'error');
+            return;
+        }
+
+        const data = {
+            title: title,
+            authors: authors,
+            year: document.getElementById('paper-edit-year').value ? parseInt(document.getElementById('paper-edit-year').value) : null,
+            journal: document.getElementById('paper-edit-journal').value.trim() || null,
+            doi: document.getElementById('paper-edit-doi').value.trim() || null,
+            abstract: document.getElementById('paper-edit-abstract').value.trim() || null,
+            keywords: document.getElementById('paper-edit-keywords').value.trim() || null
+        };
+
+        try {
+            await API.papers.update(this.currentEditingId, data);
+            UIComponents.showNotification('Paper updated successfully', 'success');
+            UIComponents.hideModal('paper-edit-modal');
+            this.loadPapers();
+            
+            // Update dashboard stats if needed
+            if (window.dashboardManager) {
+                window.dashboardManager.loadStats();
+            }
+        } catch (error) {
+            console.error('Error updating paper:', error);
+            UIComponents.showNotification(`Failed to update paper: ${error.message}`, 'error');
         }
     }
 

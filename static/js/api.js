@@ -1,14 +1,57 @@
 // API Configuration
 const API_BASE_URL = '/api';
-const API_KEY = 'scilib-demo-key-2024'; // This should match your .env file
+
+// Session management
+class SessionManager {
+    static getToken() {
+        return localStorage.getItem('scilib_session_token');
+    }
+    
+    static setToken(token) {
+        localStorage.setItem('scilib_session_token', token);
+    }
+    
+    static clearToken() {
+        localStorage.removeItem('scilib_session_token');
+    }
+    
+    static async login(apiKey) {
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ api_key: apiKey })
+            });
+            
+            if (!response.ok) {
+                throw new Error('Invalid API key');
+            }
+            
+            const data = await response.json();
+            this.setToken(data.session_token);
+            return true;
+        } catch (error) {
+            this.clearToken();
+            throw error;
+        }
+    }
+}
 
 // API Helper Functions
 class API {
     static async request(endpoint, options = {}) {
         const url = `${API_BASE_URL}${endpoint}`;
+        const token = SessionManager.getToken();
+        
+        if (!token) {
+            throw new Error('No session token found. Please login first.');
+        }
+        
         const defaultOptions = {
             headers: {
-                'Authorization': `Bearer ${API_KEY}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
         };

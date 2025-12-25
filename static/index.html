@@ -39,6 +39,9 @@
                     <button class="upload-btn" id="upload-btn">
                         <i class="fas fa-upload"></i> Upload Paper
                     </button>
+                    <button class="logout-btn" id="logout-btn" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -259,6 +262,54 @@
         </div>
     </div>
 
+    <!-- Paper Edit Modal -->
+    <div id="paper-edit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="paper-edit-title">Edit Paper</h3>
+                <button class="modal-close" id="paper-edit-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="paper-edit-form">
+                    <div class="form-group">
+                        <label for="paper-edit-title-input">Title</label>
+                        <input type="text" id="paper-edit-title-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-authors">Authors</label>
+                        <input type="text" id="paper-edit-authors" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-year">Year</label>
+                        <input type="number" id="paper-edit-year" min="1900" max="2030">
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-journal">Journal</label>
+                        <input type="text" id="paper-edit-journal">
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-doi">DOI</label>
+                        <input type="text" id="paper-edit-doi">
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-abstract">Abstract</label>
+                        <textarea id="paper-edit-abstract" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="paper-edit-keywords">Keywords</label>
+                        <input type="text" id="paper-edit-keywords" placeholder="keyword1, keyword2, keyword3">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="paper-edit-cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Paper Details Modal -->
     <div id="paper-details-modal" class="modal large">
         <div class="modal-content">
@@ -272,6 +323,27 @@
                 <div id="paper-details-content">
                     <!-- Paper details will be loaded here -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Enter API Key</h3>
+            </div>
+            <div class="modal-body">
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="api-key-input">API Key:</label>
+                        <input type="password" id="api-key-input" required>
+                        <small>Enter your SciLib API key to continue.</small>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary">Login</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
