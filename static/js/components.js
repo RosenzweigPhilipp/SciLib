@@ -35,9 +35,16 @@ class UIComponents {
     static createPaperCard(paper) {
         const card = document.createElement('div');
         card.className = 'paper-card';
+        
+        // Generate AI extraction status badge
+        const aiStatus = UIComponents.getAIStatusBadge(paper);
+        
         card.innerHTML = `
-            <div class="paper-title" onclick="PaperManager.showPaperDetails(${paper.id})">
-                ${Utils.sanitizeHtml(paper.title)}
+            <div class="paper-header-row">
+                <div class="paper-title" onclick="window.paperManager && window.paperManager.showPaperDetails(${paper.id})">
+                    ${Utils.sanitizeHtml(paper.title)}
+                </div>
+                ${aiStatus}
             </div>
             <div class="paper-authors">${Utils.sanitizeHtml(paper.authors)}</div>
             ${paper.abstract ? `<div class="paper-abstract-preview">${Utils.truncateText(paper.abstract)}</div>` : ''}
@@ -45,6 +52,7 @@ class UIComponents {
                 <div>
                     ${paper.year ? `<span class="year">${paper.year}</span>` : ''}
                     ${paper.journal ? `<span class="journal">${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
+                    ${paper.extraction_confidence ? `<span class="ai-confidence" title="AI Extraction Confidence">${Math.round(paper.extraction_confidence * 100)}% AI</span>` : ''}
                 </div>
                 <div class="paper-actions">
                     <button class="action-btn view-btn" data-paper-id="${paper.id}" title="View Details">
@@ -62,6 +70,35 @@ class UIComponents {
         return card;
     }
 
+    // Get AI extraction status badge
+    static getAIStatusBadge(paper) {
+        if (!paper.extraction_status) {
+            return '<span class="ai-badge ai-pending" title="Manual Entry"><i class="fas fa-user"></i> Manual</span>';
+        }
+        
+        switch (paper.extraction_status) {
+            case 'completed':
+                const confidence = paper.extraction_confidence || 0;
+                const confidenceClass = confidence > 0.8 ? 'high' : confidence > 0.5 ? 'medium' : 'low';
+                return `<span class="ai-badge ai-completed ai-confidence-${confidenceClass} ai-badge-clickable" 
+                    onclick="window.paperManager && window.paperManager.reExtractWithLLM(${paper.id}, event)" 
+                    title="Click to re-extract with LLM (higher accuracy)">
+                    <i class="fas fa-robot"></i> AI ${Math.round(confidence * 100)}%
+                </span>`;
+            case 'processing':
+                return '<span class="ai-badge ai-processing" title="Extracting..."><i class="fas fa-spinner fa-spin"></i> Processing</span>';
+            case 'failed':
+                return `<span class="ai-badge ai-failed ai-badge-clickable" 
+                    onclick="window.paperManager && window.paperManager.reExtractWithLLM(${paper.id}, event)" 
+                    title="Click to retry with LLM">
+                    <i class="fas fa-exclamation-triangle"></i> Failed
+                </span>`;
+            case 'pending':
+            default:
+                return '<span class="ai-badge ai-pending" title="Pending Extraction"><i class="fas fa-clock"></i> Pending</span>';
+        }
+    }
+
     // Create collection card
     static createCollectionCard(collection) {
         const card = document.createElement('div');
@@ -72,10 +109,10 @@ class UIComponents {
             <div class="collection-meta">
                 <span>Created ${Utils.formatDate(collection.created_at)}</span>
                 <div class="collection-actions">
-                    <button class="action-btn" onclick="CollectionManager.editCollection(${collection.id})" title="Edit">
+                    <button class="action-btn" onclick="window.collectionManager && window.collectionManager.editCollection(${collection.id})" title="Edit">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="action-btn" onclick="CollectionManager.deleteCollection(${collection.id})" title="Delete">
+                    <button class="action-btn" onclick="window.collectionManager && window.collectionManager.deleteCollection(${collection.id})" title="Delete">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -93,11 +130,11 @@ class UIComponents {
                 <div class="tag-color" style="background-color: ${tag.color}"></div>
                 <span class="tag-name">${Utils.sanitizeHtml(tag.name)}</span>
             </div>
-            <div class="tag-actions">
-                <button class="action-btn" onclick="TagManager.editTag(${tag.id})" title="Edit">
+                <div class="tag-actions">
+                <button class="action-btn" onclick="window.tagManager && window.tagManager.editTag(${tag.id})" title="Edit">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button class="action-btn" onclick="TagManager.deleteTag(${tag.id})" title="Delete">
+                <button class="action-btn" onclick="window.tagManager && window.tagManager.deleteTag(${tag.id})" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -136,7 +173,11 @@ class UIComponents {
 // Upload Manager
 class UploadManager {
     constructor() {
-        this.setupUploadHandlers();
+        try {
+            this.setupUploadHandlers();
+        } catch (e) {
+            console.error('UploadManager initialization failed', e);
+        }
     }
 
     setupUploadHandlers() {
@@ -144,34 +185,40 @@ class UploadManager {
         const fileInput = document.getElementById('file-input');
         const browseBtn = document.getElementById('browse-btn');
 
+        if (!uploadArea) console.warn('UploadManager: upload-area element not found');
+        if (!fileInput) console.warn('UploadManager: file-input element not found');
+        if (!browseBtn) console.warn('UploadManager: browse-btn element not found');
+
         // Click to browse
-        uploadArea.addEventListener('click', () => fileInput.click());
-        browseBtn.addEventListener('click', (e) => {
+        if (uploadArea && fileInput) uploadArea.addEventListener('click', () => fileInput.click());
+        if (browseBtn && fileInput) browseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             fileInput.click();
         });
 
         // Drag and drop
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
 
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                this.handleFileUpload(files[0]);
-            }
-        });
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    this.handleFileUpload(files[0]);
+                }
+            });
+        }
 
         // File input change
-        fileInput.addEventListener('change', (e) => {
+        if (fileInput) fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleFileUpload(e.target.files[0]);
             }
@@ -190,17 +237,23 @@ class UploadManager {
             const result = await API.papers.upload(file);
             this.hideUploadProgress();
             UIComponents.hideModal('upload-modal');
+
+            // result now contains { paper, task_id }
+            const paper = result && result.paper ? result.paper : null;
+            const taskId = result && result.task_id ? result.task_id : null;
+
             UIComponents.showNotification('Paper uploaded successfully!', 'success');
-            
-            // Refresh the papers list
-            if (window.paperManager) {
+
+            // Navigate to the paper details view immediately
+            if (paper && window.paperManager) {
+                window.paperManager.showPaperDetailsWithExtraction(paper.id, taskId);
+                // Also refresh the papers list
                 window.paperManager.loadPapers();
             }
-            
-            // Update dashboard stats
-            if (window.dashboardManager) {
-                window.dashboardManager.loadStats();
-            }
+
+            // Refresh dashboard stats
+            if (window.dashboardManager) window.dashboardManager.loadStats();
+
         } catch (error) {
             this.hideUploadProgress();
             UIComponents.showNotification(`Upload failed: ${error.message}`, 'error');

@@ -1,23 +1,24 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-import secrets
-import time
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from .config import settings
-from .auth import verify_session_token
 from .api import papers, collections, tags
-from .ai import endpoints_simple as ai_endpoints
+from .ai import endpoints as ai_endpoints
 
-# Session storage (in production, use Redis or database)
-active_sessions = {}
-
-class LoginRequest(BaseModel):
-    api_key: str
-
-class LoginResponse(BaseModel):
-    session_token: str
-    expires_in: int
+# Simple API key authentication with debug logging
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    print(f"DEBUG: Received API key: {x_api_key}")
+    print(f"DEBUG: Expected API key: {settings.api_key}")
+    if not x_api_key or x_api_key != settings.api_key:
+        print(f"DEBUG: Authentication failed - key mismatch")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key. Use X-API-Key header."
+        )
+    print(f"DEBUG: Authentication successful")
+    return x_api_key
 
 # Create FastAPI app
 app = FastAPI(
@@ -27,14 +28,23 @@ app = FastAPI(
     debug=settings.debug
 )
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Include API routes with authentication
-app.include_router(papers.router, prefix="/api", dependencies=[Depends(verify_session_token)])
-app.include_router(collections.router, prefix="/api", dependencies=[Depends(verify_session_token)])
-app.include_router(tags.router, prefix="/api", dependencies=[Depends(verify_session_token)])
-app.include_router(ai_endpoints.router, dependencies=[Depends(verify_session_token)])
+# Include API routes with simple API key authentication
+app.include_router(papers.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(collections.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(tags.router, prefix="/api", dependencies=[Depends(verify_api_key)])
+app.include_router(ai_endpoints.router, dependencies=[Depends(verify_api_key)])
 
 # Public endpoints (no auth required)
 @app.get("/")
@@ -42,29 +52,6 @@ async def serve_frontend():
     """Serve the main frontend page"""
     return FileResponse("static/index.html")
 
-
-@app.post("/api/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
-    """Login endpoint that exchanges API key for session token"""
-    if request.api_key != settings.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key"
-        )
-    
-    # Generate session token
-    session_token = secrets.token_urlsafe(32)
-    expires_at = time.time() + 86400  # 24 hours
-    
-    active_sessions[session_token] = {
-        "expires_at": expires_at,
-        "created_at": time.time()
-    }
-    
-    return LoginResponse(
-        session_token=session_token,
-        expires_in=86400
-    )
 
 @app.get("/health")
 async def health_check():

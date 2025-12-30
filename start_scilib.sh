@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-"""
-SciLib AI Startup Script
-
-This script starts all necessary services for the SciLib AI-powered 
-scientific literature manager:
-
-1. Redis server (for Celery task queue)
-2. Celery worker (for background AI tasks)  
-3. FastAPI server (main application)
-
-Usage:
-    ./start_scilib.sh [--dev]
-    
-Options:
-    --dev    Start in development mode with auto-reload
-"""
+#
+# SciLib AI Startup Script
+#
+# This script starts all necessary services for the SciLib AI-powered 
+# scientific literature manager:
+#
+# 1. Redis server (for Celery task queue)
+# 2. Celery worker (for background AI tasks)  
+# 3. FastAPI server (main application)
+#
+# Usage:
+#     ./start_scilib.sh [--dev]
+#     
+# Options:
+#     --dev    Start in development mode with auto-reload
+#
 
 set -e  # Exit on any error
 
@@ -27,6 +27,13 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🧪 Starting SciLib AI-powered Literature Manager${NC}"
 echo "=================================================="
+
+# Activate virtual environment if it exists
+if [ -d ".venv" ]; then
+    echo -e "${BLUE}Activating virtual environment...${NC}"
+    source .venv/bin/activate
+    echo -e "${GREEN}✓${NC} Virtual environment activated"
+fi
 
 # Check if Redis is running
 check_redis() {
@@ -72,17 +79,41 @@ check_python_env() {
 # Start Celery worker in background
 start_celery() {
     echo -e "${BLUE}Starting Celery worker...${NC}"
+    
+    # Stop any existing Celery workers first
+    if pgrep -f "celery.*worker" > /dev/null; then
+        echo -e "${YELLOW}Stopping existing Celery workers...${NC}"
+        pkill -f "celery.*worker"
+        sleep 2
+        echo -e "${GREEN}✓${NC} Stopped old workers"
+    fi
+    
     export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-    python celery_worker.py > celery.log 2>&1 &
+    
+    # Check if DEBUG mode is enabled
+    if grep -q "^DEBUG=True" .env 2>/dev/null || grep -q "^DEBUG=true" .env 2>/dev/null; then
+        echo -e "${YELLOW}DEBUG mode detected - showing Celery output in terminal${NC}"
+        # Don't redirect to file - show colored output in terminal
+        python app/celery_worker.py &
+    else
+        # Production mode - redirect to log file
+        python app/celery_worker.py > logs/celery.log 2>&1 &
+    fi
+    
     CELERY_PID=$!
     echo $CELERY_PID > celery.pid
     sleep 3
     
     if ps -p $CELERY_PID > /dev/null; then
         echo -e "${GREEN}✓${NC} Celery worker started (PID: $CELERY_PID)"
+        if grep -q "^DEBUG=True" .env 2>/dev/null || grep -q "^DEBUG=true" .env 2>/dev/null; then
+            echo -e "${YELLOW}  Debug output will appear below when tasks run${NC}"
+        else
+            echo -e "${BLUE}  Logs available at: logs/celery.log${NC}"
+        fi
     else
         echo -e "${RED}✗${NC} Failed to start Celery worker"
-        cat celery.log
+        [ -f logs/celery.log ] && cat logs/celery.log
         exit 1
     fi
 }

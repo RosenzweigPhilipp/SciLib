@@ -375,3 +375,246 @@
         justify-content: center;
     }
 }
+
+/* AI Extraction Status Badges */
+.paper-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.paper-header-row .paper-title {
+    flex: 1;
+}
+
+.ai-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid;
+}
+
+.ai-badge-clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ai-badge-clickable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    filter: brightness(0.95);
+}
+
+.ai-badge-clickable:active {
+    transform: scale(0.98);
+}
+
+.ai-badge.ai-completed {
+    background: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.ai-badge.ai-completed.ai-confidence-high {
+    background: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+.ai-badge.ai-completed.ai-confidence-medium {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+}
+
+.ai-badge.ai-completed.ai-confidence-low {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.ai-badge.ai-processing {
+    background: #cce5ff;
+    color: #004085;
+    border-color: #b3d9ff;
+}
+
+.ai-badge.ai-failed {
+    background: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.ai-badge.ai-pending {
+    background: #e2e3e5;
+    color: #6c757d;
+    border-color: #d6d8db;
+}
+
+/* AI Extraction Info */
+.ai-extraction-info {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.ai-extraction-info h4 {
+    margin: 0 0 1rem 0;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ai-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ai-stat {
+    background: white;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+.ai-stat label {
+    display: block;
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.ai-stat value {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+}
+
+.ai-metadata {
+    border-top: 1px solid #dee2e6;
+    padding-top: 1rem;
+}
+
+.ai-metadata p {
+    margin: 0;
+    font-style: italic;
+    color: #6c757d;
+}
+
+.ai-error {
+    padding: 0.75rem;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    color: #721c24;
+}
+
+.ai-error p {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* AI Confidence in paper meta */
+.ai-confidence {
+    background: #e7f3ff;
+    color: #0066cc;
+    padding: 0.15rem 0.4rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+/* Extraction Status Banner */
+.extraction-status-banner {
+    display: none;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.extraction-status-banner i {
+    font-size: 1.2rem;
+}
+
+.extraction-status-banner.processing {
+    background: #cce5ff;
+    color: #004085;
+    border: 1px solid #b3d9ff;
+}
+
+.extraction-status-banner.completed {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.extraction-status-banner.failed {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Field Extraction State */
+.form-group input.extracting,
+.form-group textarea.extracting {
+    background: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.7;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Field Update Animation */
+.form-group input.field-updated,
+.form-group textarea.field-updated {
+    animation: fieldUpdate 1s ease;
+}
+
+@keyframes fieldUpdate {
+    0% {
+        background: #d4edda;
+    }
+    100% {
+        background: white;
+    }
+}

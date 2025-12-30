@@ -13,8 +13,17 @@ import logging
 from pathlib import Path
 
 # Add the app directory to the path
-app_dir = Path(__file__).parent / "app"
+project_root = Path(__file__).parent.parent
+app_dir = Path(__file__).parent
 sys.path.insert(0, str(app_dir))
+
+# Load environment variables from project .env so workers have keys
+try:
+    from dotenv import load_dotenv
+    load_dotenv(project_root / ".env")
+except Exception:
+    # dotenv is optional in some setups; proceed if not available
+    pass
 
 # Configure logging
 logging.basicConfig(
@@ -36,13 +45,13 @@ def main():
         
         logger.info("Starting SciLib AI Celery worker...")
         
-        # Start worker
+        # Start worker (listen to both 'celery' and 'default' queues so existing tasks are picked up)
         celery_app.worker_main([
             "worker",
-            "--loglevel=info",
+            "--loglevel=debug",
             "--concurrency=2",  # Limit concurrent tasks
             "--prefetch-multiplier=1",
-            "--queues=default",
+            "--queues=celery,default",
             "--hostname=scilib-ai-worker@%h"
         ])
         

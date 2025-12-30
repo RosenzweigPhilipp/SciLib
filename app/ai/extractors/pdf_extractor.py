@@ -8,6 +8,7 @@ from PIL import Image
 from typing import Dict, Optional, List
 from pathlib import Path
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -149,3 +150,141 @@ class PDFExtractor:
             logger.error(f"Failed to extract first page text: {e}")
         
         return ""
+    
+    def extract_basic_metadata(self, pdf_path: str) -> Dict:
+        """
+        Extract basic metadata (title, authors, DOI) directly from PDF without LLM.
+        Uses PDF metadata and first-page heuristics.
+        
+        Returns:
+            Dict with title, authors, doi if found
+        """
+        result = {
+            "title": None,
+            "authors": None,
+            "doi": None,
+            "method": "direct_extraction"
+        }
+        
+        try:
+            with fitz.open(pdf_path) as doc:
+                # Try PDF metadata first
+                if doc.metadata:
+                    if doc.metadata.get("title") and len(doc.metadata.get("title", "").strip()) > 5:
+                        result["title"] = doc.metadata["title"].strip()
+                    if doc.metadata.get("author") and len(doc.metadata.get("author", "").strip()) > 3:
+                        result["authors"] = doc.metadata["author"].strip()
+                
+                # If no metadata, try extracting from first page
+                if not result["title"] and len(doc) > 0:
+                    first_page_text = doc[0].get_text()
+                    
+                    # Extract title (usually first large text block)
+                    if first_page_text:
+                        lines = [line.strip() for line in first_page_text.split('\n') if line.strip()]
+                        if lines:
+                            # Title is typically the first substantial line after headers
+                            title_candidates = []
+                            skip_keywords = [
+                                'university', 'institute', 'department', 'faculty',
+                                'college', 'school', 'center', 'centre', 'laboratory', 'email',
+                                '@', 'www.', 'http', '.edu', '.com', '.org', '.ac.uk',
+                                'short papers', 'conference', 'proceedings', 
+                                'volume', 'issue', 'pp.', 'pages', 'page ',
+                                'ieee', 'acm', 'springer', 'elsevier',
+                                'transactions', 'journal of', 'letters', 'practice',
+                                'copyright', '©', 'published', 'received',
+                                'contents lists', 'sciencedirect', 'available at',
+                                'journal homepage', 'preprint', 'submitted'
+                            ]
+                            
+                            for i, line in enumerate(lines[:20]):  # Check first 20 lines
+                                # Skip very short lines or very long lines (likely not titles)
+                                if len(line) < 15 or len(line) > 150:
+                                    continue
+                                    
+                                # Skip pure numbers or page numbers
+                                if re.match(r'^\d+\s*$', line):
+                                    continue
+                                
+                                # Skip lines that look like journal citations (e.g., "Journal Name 80 (2018) 83-93")
+                                if re.search(r'\d+\s*\(\d{4}\)\s*\d+[-–]\d+', line):
+                                    continue
+                                    
+                                # Skip lines with journal/conference markers
+                                if any(marker in line.lower() for marker in skip_keywords):
+                                    continue
+                                    
+                                # Skip lines with numbers at the start (likely author refs or page numbers)
+                                if re.match(r'^\d+[A-Z]', line):
+                                    continue
+                                    
+                                # Skip lines with lots of commas (likely author lists)
+                                if line.count(',') > 3:
+                                    continue
+                                    
+                                # Skip very short uppercase lines (likely section headers like "Abstract")
+                                if len(line) < 30 and line.isupper():
+                                    continue
+                                
+                                # Skip lines that end with dates (like "OCTOBER 1969")
+                                if re.search(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\b', line, re.IGNORECASE):
+                                    continue
+                                
+                                # Skip lines with special markers like ✩ or * at the end (footnote markers)
+                                if re.search(r'[✩★*†‡§]$', line):
+                                    continue
+                                
+                                # Check if next line continues the title
+                                potential_title = line
+                                if i + 1 < len(lines):
+                                    next_line = lines[i + 1].strip()
+                                    # If next line looks like a continuation (reasonable length, not author name pattern)
+                                    if next_line and 5 < len(next_line) < 100:
+                                        # Check for footnote marker at the end
+                                        has_footnote = re.search(r'[✩★*†‡§]$', next_line)
+                                        if has_footnote:
+                                            # Remove the marker and include the line
+                                            next_line = re.sub(r'[✩★*†‡§]$', '', next_line).strip()
+                                        
+                                        # Not an author line (doesn't have patterns like "NAME, IEEE" or multiple commas)
+                                        if (next_line.count(',') <= 1 and 
+                                            not re.search(r'[A-Z][A-Z\s\.]+,\s*(MEMBER|SENIOR|FELLOW|IEEE|ACM)', next_line, re.IGNORECASE) and
+                                            not any(marker in next_line.lower() for marker in skip_keywords)):
+                                            # Check if it starts with lowercase (definitely continuation) or looks like title text
+                                            if next_line[0].islower() or (next_line[0].isupper() and not next_line.isupper()):
+                                                potential_title += " " + next_line
+                                
+                                # This looks like a potential title
+                                title_candidates.append(potential_title)
+                                if len(title_candidates) >= 1:  # Take first good candidate
+                                    break
+                            
+                            if title_candidates:
+                                # Use the first good candidate
+                                result["title"] = title_candidates[0]
+                
+                # Extract DOI from first page (regardless of whether title was found)
+                if len(doc) > 0 and not result.get("doi"):
+                    # Always extract first page text for DOI search
+                    doi_page_text = doc[0].get_text()
+                    
+                    if doi_page_text:
+                        # Extract DOI using regex
+                        doi_patterns = [
+                            r'(?:doi:?\s*)(10\.\d{4,}/[^\s]+)',
+                            r'(?:DOI:?\s*)(10\.\d{4,}/[^\s]+)',
+                            r'\b(10\.\d{4,}/[^\s\]<>]+)'
+                        ]
+                        
+                        text_to_search = doi_page_text[:8000]  # Increased from 3000 to capture DOIs near end of page
+                        for pattern in doi_patterns:
+                            match = re.search(pattern, text_to_search, re.IGNORECASE)
+                            if match:
+                                result["doi"] = match.group(1).rstrip('.')
+                                break
+                
+        except Exception as e:
+            logger.error(f"Failed to extract basic metadata: {e}")
+        
+        return result

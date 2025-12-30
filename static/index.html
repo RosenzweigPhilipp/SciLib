@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SciLib - AI-Powered Scientific Literature Manager</title>
-    <link rel="stylesheet" href="/static/css/main.css">
-    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=1">
+    <link rel="stylesheet" href="/static/css/components.css?v=1">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
@@ -39,9 +39,7 @@
                     <button class="upload-btn" id="upload-btn">
                         <i class="fas fa-upload"></i> Upload Paper
                     </button>
-                    <button class="logout-btn" id="logout-btn" title="Logout">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
+                    <!-- Logout button removed -->
                 </div>
             </div>
         </div>
@@ -122,6 +120,9 @@
                         </div>
                         <button class="btn btn-primary" id="add-paper-btn">
                             <i class="fas fa-plus"></i> Add Paper
+                        </button>
+                        <button class="btn btn-danger" id="clear-papers-btn" title="Clear all papers">
+                            <i class="fas fa-trash-alt"></i> Clear All
                         </button>
                     </div>
                 </div>
@@ -327,21 +328,21 @@
         </div>
     </div>
 
-    <!-- Login Modal -->
-    <div id="login-modal" class="modal">
+    <!-- API Key Modal -->
+    <div id="api-key-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Enter API Key</h3>
             </div>
             <div class="modal-body">
-                <form id="login-form">
+                <form id="api-key-form">
                     <div class="form-group">
                         <label for="api-key-input">API Key:</label>
                         <input type="password" id="api-key-input" required>
-                        <small>Enter your SciLib API key to continue.</small>
+                        <small>Enter your SciLib API key to access the application.</small>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="btn-primary">Login</button>
+                        <button type="submit" class="btn btn-primary">Set API Key</button>
                     </div>
                 </form>
             </div>
@@ -356,8 +357,9 @@
         </div>
     </div>
 
-    <script src="/static/js/api.js"></script>
-    <script src="/static/js/components.js"></script>
-    <script src="/static/js/main.js"></script>
+    <link rel="icon" href="/static/favicon.svg">
+    <script src="/static/js/api.js?v=6"></script>
+    <script src="/static/js/components.js?v=6"></script>
+    <script src="/static/js/main.js?v=6"></script>
 </body>
 </html>

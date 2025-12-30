@@ -83,6 +83,13 @@ uploads/
 *.tmp
 *.temp
 
+# Logs directory (keep structure, ignore content)
+logs/*.log
+logs/*.txt
+logs/
 
-/minimals
-/minimals/*
+docs/
+
+minimals/
+
+dump.rdb

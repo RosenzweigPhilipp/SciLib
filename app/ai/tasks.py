@@ -14,6 +14,14 @@ except ImportError:
 
 from .agents.metadata_pipeline import MetadataExtractionPipeline
 
+# Load environment variables (helpful when Celery spawns workers)
+try:
+    from dotenv import load_dotenv
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    load_dotenv(os.path.join(project_root, '.env'))
+except Exception:
+    pass
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,7 +52,7 @@ else:
 
 
 @celery_app.task(bind=True, name="extract_pdf_metadata")
-def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int) -> Dict[str, Any]:
+def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int, use_llm: bool = False) -> Dict[str, Any]:
     """
     Celery task for extracting metadata from PDF files.
     
@@ -52,6 +60,7 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int) 
         pdf_path: Path to the PDF file
         paper_id: Database ID of the paper record
         user_id: ID of the user who uploaded the paper
+        use_llm: Whether to use LLM for higher accuracy (slower and costs tokens)
         
     Returns:
         Dict with extraction results and metadata
@@ -63,19 +72,24 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int) 
             meta={
                 "current": 0,
                 "total": 100,
-                "status": "Initializing AI extraction pipeline..."
+                "status": "Initializing AI extraction pipeline..." + (" (High-Accuracy Mode)" if use_llm else "")
             }
         )
         
-        logger.info(f"Starting metadata extraction for paper {paper_id}, file: {pdf_path}")
+        logger.info(f"Starting metadata extraction for paper {paper_id}, file: {pdf_path} (task id: {getattr(self.request, 'id', None)}, use_llm: {use_llm})")
         
         # Initialize the extraction pipeline
         pipeline = MetadataExtractionPipeline(
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             exa_api_key=os.getenv("EXA_API_KEY"),
             crossref_email=os.getenv("CROSSREF_EMAIL"),
-            semantic_scholar_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+            semantic_scholar_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY"),
+            use_llm=use_llm  # Use provided parameter
         )
+
+        # Log missing credentials for easier debugging
+        if use_llm and not os.getenv("OPENAI_API_KEY"):
+            logger.warning("OPENAI_API_KEY not set in worker environment; LLM calls will fail or fallback will be used.")
         
         # Update progress
         self.update_state(
@@ -87,9 +101,59 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int) 
             }
         )
         
-        # Run the extraction pipeline
+        # Run the extraction pipeline (same call used in minimals/pipeline/test_extraction.py)
         import asyncio
-        result = asyncio.run(pipeline.extract_metadata(pdf_path, paper_id))
+        try:
+            logger.info("Invoking MetadataExtractionPipeline.extract_metadata()")
+            
+            # If use_llm is True (manual re-extraction), force LLM to run even if APIs have results
+            force_llm = use_llm
+            result = asyncio.run(pipeline.extract_metadata(pdf_path, paper_id, force_llm=force_llm))
+            logger.info(f"Pipeline returned for paper {paper_id}: extraction_status={result.get('extraction_status')} confidence={result.get('confidence')} sources={result.get('sources')}")
+            
+            # If confidence is low (<80%) and LLM is available but not used, retry with LLM
+            confidence = result.get('confidence', 0)
+            logger.info(f"Checking retry conditions: confidence={confidence:.2%}, use_llm={use_llm}, OPENAI_API_KEY={'set' if os.getenv('OPENAI_API_KEY') else 'not set'}")
+            
+            if confidence < 0.80 and not use_llm and os.getenv("OPENAI_API_KEY"):
+                logger.warning(f"🔄 TRIGGERING LLM RETRY: Low confidence ({confidence:.1%}) detected for paper {paper_id}")
+                self.update_state(
+                    state="PROGRESS",
+                    meta={
+                        "current": 50,
+                        "total": 100,
+                        "status": f"Low confidence ({confidence:.0%}), improving with LLM analysis..."
+                    }
+                )
+                
+                # Create new pipeline with LLM enabled
+                pipeline_with_llm = MetadataExtractionPipeline(
+                    openai_api_key=os.getenv("OPENAI_API_KEY"),
+                    exa_api_key=os.getenv("EXA_API_KEY"),
+                    crossref_email=os.getenv("CROSSREF_EMAIL"),
+                    semantic_scholar_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY"),
+                    use_llm=True
+                )
+                
+                # Re-run with force_llm=True
+                logger.info(f"Re-running extraction with LLM for paper {paper_id}")
+                result = asyncio.run(pipeline_with_llm.extract_metadata(pdf_path, paper_id, force_llm=True))
+                new_confidence = result.get('confidence', 0)
+                
+                if new_confidence > confidence:
+                    logger.warning(f"✅ LLM improved confidence for paper {paper_id}: {confidence:.1%} → {new_confidence:.1%}")
+                else:
+                    logger.info(f"LLM confidence for paper {paper_id}: {new_confidence:.1%}")
+            elif confidence >= 0.80:
+                logger.info(f"Confidence {confidence:.1%} is acceptable, no LLM retry needed")
+            elif use_llm:
+                logger.info(f"LLM already enabled with force_llm={force_llm}, extraction complete")
+            else:
+                logger.warning(f"OPENAI_API_KEY not set, cannot retry with LLM")
+                    
+        except Exception as e:
+            logger.error(f"Pipeline invocation raised exception for paper {paper_id}: {e}")
+            raise
         
         # Update progress throughout the pipeline
         self.update_state(
@@ -103,6 +167,7 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int) 
         
         # Update database with results
         update_success = update_paper_extraction_results(paper_id, result)
+        logger.info(f"Database update success: {update_success} for paper {paper_id}")
         
         if not update_success:
             logger.error(f"Failed to update database for paper {paper_id}")
@@ -156,30 +221,45 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
     """
     try:
         # Import here to avoid circular imports
-        from ...database.connection import get_db
-        from ...database.models import Paper
-        from sqlalchemy.orm import Session
+        from ..database import SessionLocal
+        from ..database import Paper as PaperModel
         
-        # Get database session
-        db_gen = get_db()
-        db: Session = next(db_gen)
+        # Create database session directly
+        db = SessionLocal()
         
         try:
             # Find the paper
-            paper = db.query(Paper).filter(Paper.id == paper_id).first()
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
             if not paper:
                 logger.error(f"Paper {paper_id} not found in database")
                 return False
             
-            # Update extraction fields
-            paper.extraction_status = extraction_result.get("extraction_status", "failed")
-            paper.extraction_confidence = extraction_result.get("confidence", 0.0)
-            paper.extraction_sources = extraction_result.get("sources", [])
-            paper.extraction_metadata = extraction_result.get("metadata", {})
+            # Store old confidence for comparison
+            old_confidence = paper.extraction_confidence or 0.0
+            new_confidence = extraction_result.get("confidence", 0.0)
+            
+            # Only update if new confidence is higher or this is the first extraction
+            if new_confidence >= old_confidence:
+                logger.info(f"Updating paper {paper_id}: new confidence {new_confidence:.2%} >= old confidence {old_confidence:.2%}")
+                
+                # Update extraction fields
+                paper.extraction_status = extraction_result.get("extraction_status", "failed")
+                paper.extraction_confidence = new_confidence
+                paper.extraction_sources = extraction_result.get("sources", {})
+                paper.extraction_metadata = extraction_result.get("metadata", {})
+                paper.extracted_at = datetime.now()
+            else:
+                logger.info(f"Keeping old data for paper {paper_id}: new confidence {new_confidence:.2%} < old confidence {old_confidence:.2%}")
+                # Still update status to completed but keep old data
+                paper.extraction_status = extraction_result.get("extraction_status", "completed")
+                paper.extracted_at = datetime.now()
+                # Don't update confidence, sources, or metadata - keep the better ones
             
             # If successful and high confidence, update main fields
+            # Only update if we actually updated the extraction data (new confidence >= old)
             if (paper.extraction_status == "completed" and 
-                paper.extraction_confidence >= 0.6):
+                paper.extraction_confidence >= 0.6 and
+                new_confidence >= old_confidence):
                 
                 metadata = extraction_result.get("metadata", {})
                 
@@ -187,9 +267,24 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
                 if metadata.get("title") and (not paper.title or paper.extraction_confidence > 0.8):
                     paper.title = metadata["title"]
                 
-                # Update authors if not set
-                if metadata.get("authors") and not paper.authors:
-                    paper.authors = metadata["authors"]
+                # Update authors if not set or is "Unknown Authors"
+                if metadata.get("authors") and (not paper.authors or paper.authors == "Unknown Authors"):
+                    # Convert structured authors list to string
+                    authors = metadata["authors"]
+                    if isinstance(authors, list):
+                        author_names = []
+                        for author in authors:
+                            if isinstance(author, dict):
+                                given = author.get("given", "")
+                                family = author.get("family", "")
+                                name = f"{given} {family}".strip()
+                                if name:
+                                    author_names.append(name)
+                            else:
+                                author_names.append(str(author))
+                        paper.authors = ", ".join(author_names)
+                    else:
+                        paper.authors = str(authors)
                 
                 # Update year if not set
                 if metadata.get("year") and not paper.year:
@@ -229,6 +324,30 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
     except Exception as e:
         logger.error(f"Failed to get database connection: {e}")
         return False
+
+
+def run_extraction_sync(pdf_path: str, paper_id: int, user_id: int = 1) -> Dict[str, Any]:
+    """
+    Run the extraction pipeline synchronously (useful as a fallback when Celery is unavailable).
+    This mirrors the behavior in `minimals/pipeline/test_extraction.py`.
+    """
+    try:
+        pipeline = MetadataExtractionPipeline(
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            exa_api_key=os.getenv("EXA_API_KEY"),
+            crossref_email=os.getenv("CROSSREF_EMAIL"),
+            semantic_scholar_key=os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+        )
+        import asyncio
+        logger.info(f"Running synchronous extraction for paper {paper_id}")
+        result = asyncio.run(pipeline.extract_metadata(pdf_path, paper_id))
+        update_paper_extraction_results(paper_id, result)
+        return result
+    except Exception as e:
+        logger.error(f"Synchronous extraction failed for paper {paper_id}: {e}")
+        # Ensure DB reflects failure
+        update_paper_extraction_results(paper_id, {"extraction_status": "failed", "errors": [str(e)]})
+        return {"extraction_status": "failed", "errors": [str(e)]}
 
 
 @celery_app.task(name="get_extraction_status")

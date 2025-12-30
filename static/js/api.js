@@ -1,41 +1,20 @@
 // API Configuration
 const API_BASE_URL = '/api';
 
-// Session management
-class SessionManager {
-    static getToken() {
-        return localStorage.getItem('scilib_session_token');
+// Simple API key management
+class ApiKeyManager {
+    static getApiKey() {
+        return localStorage.getItem('scilib_api_key');
     }
     
-    static setToken(token) {
-        localStorage.setItem('scilib_session_token', token);
+    static setApiKey(apiKey) {
+        // Trim whitespace and sanitize
+        const sanitized = apiKey ? apiKey.trim() : '';
+        localStorage.setItem('scilib_api_key', sanitized);
     }
     
-    static clearToken() {
-        localStorage.removeItem('scilib_session_token');
-    }
-    
-    static async login(apiKey) {
-        try {
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ api_key: apiKey })
-            });
-            
-            if (!response.ok) {
-                throw new Error('Invalid API key');
-            }
-            
-            const data = await response.json();
-            this.setToken(data.session_token);
-            return true;
-        } catch (error) {
-            this.clearToken();
-            throw error;
-        }
+    static clearApiKey() {
+        localStorage.removeItem('scilib_api_key');
     }
 }
 
@@ -43,15 +22,26 @@ class SessionManager {
 class API {
     static async request(endpoint, options = {}) {
         const url = `${API_BASE_URL}${endpoint}`;
-        const token = SessionManager.getToken();
+        let apiKey = ApiKeyManager.getApiKey();
         
-        if (!token) {
-            throw new Error('No session token found. Please login first.');
+        console.log(`DEBUG: Making request to ${url}`);
+        console.log(`DEBUG: API key from localStorage: ${apiKey ? apiKey.substring(0, 10) + '...' : 'null'}`);
+        
+        if (!apiKey) {
+            throw new Error('API key required. Please set your API key first.');
+        }
+        
+        // Sanitize API key - trim whitespace and ensure only ASCII characters
+        apiKey = apiKey.trim();
+        // Check if API key contains only valid characters (alphanumeric and common symbols)
+        if (!/^[a-zA-Z0-9\-_]+$/.test(apiKey)) {
+            console.error('DEBUG: API key contains invalid characters:', apiKey);
+            throw new Error('API key contains invalid characters. Please re-enter your API key.');
         }
         
         const defaultOptions = {
             headers: {
-                'Authorization': `Bearer ${token}`,
+                'X-API-Key': apiKey,
                 'Content-Type': 'application/json',
             },
         };
@@ -67,11 +57,19 @@ class API {
             delete requestOptions.headers['Content-Type'];
         }
 
+        console.log('DEBUG: Final request options:', {
+            ...requestOptions,
+            headers: { ...requestOptions.headers, 'X-API-Key': requestOptions.headers['X-API-Key'] ? requestOptions.headers['X-API-Key'].substring(0, 10) + '...' : 'missing' }
+        });
+
         try {
             const response = await fetch(url, requestOptions);
             
+            console.log(`DEBUG: Response status: ${response.status}`);
+            
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                console.error(`DEBUG: Error response:`, errorData);
                 throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
             }
 
@@ -89,6 +87,13 @@ class API {
 
     // Papers API
     static papers = {
+        async reExtract(paperId, useLLM = true) {
+            return await API.request(`/papers/${paperId}/re-extract`, {
+                method: 'POST',
+                body: JSON.stringify({ use_llm: useLLM })
+            });
+        },
+        
         async list(params = {}) {
             const queryParams = new URLSearchParams(params);
             return API.request(`/papers?${queryParams}`);
@@ -119,6 +124,21 @@ class API {
             return API.request(`/papers/${id}`, {
                 method: 'DELETE',
             });
+        }
+        ,
+        async clear() {
+            return API.request('/papers/clear-all', { method: 'DELETE' });
+        },
+        
+        async clearDatabase() {
+            return API.request('/papers/clear-database', { method: 'DELETE' });
+        }
+    };
+
+    // AI API
+    static ai = {
+        async getTaskStatus(taskId) {
+            return API.request(`/ai/status/${taskId}`);
         }
     };
 

@@ -183,10 +183,10 @@ class ArxivTool:
 
 
 class SemanticScholarTool:
-    """Semantic Scholar API tool for academic paper lookup."""
+    """Semantic Scholar API tool for academic paper lookup (no API key required)."""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.base_url = "https://api.semanticscholar.org/graph/v1/paper"
+        self.base_url = "https://api.semanticscholar.org/graph/v1"
         self.headers = {}
         if api_key:
             self.headers["x-api-key"] = api_key
@@ -194,11 +194,11 @@ class SemanticScholarTool:
     def search_by_title(self, title: str, limit: int = 5) -> List[Dict]:
         """Search Semantic Scholar by title."""
         try:
-            search_url = "https://api.semanticscholar.org/graph/v1/paper/search"
+            search_url = f"{self.base_url}/paper/search"
             params = {
                 "query": title,
                 "limit": limit,
-                "fields": "title,authors,year,abstract,citationCount,referenceCount,journal,externalIds"
+                "fields": "title,authors,year,abstract,citationCount,referenceCount,venue,journal,externalIds,publicationDate,url,isOpenAccess,openAccessPdf"
             }
             
             response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
@@ -208,8 +208,97 @@ class SemanticScholarTool:
             return data.get("data", [])
             
         except Exception as e:
-            logger.error(f"Semantic Scholar search failed: {e}")
+            error_str = str(e)
+            if '429' in error_str:
+                print("\033[93m⚠️  Semantic Scholar: Rate limited\033[0m")
+            elif '404' in error_str:
+                # 404 is normal - paper not found, no need to log
+                pass
+            else:
+                logger.error(f"Semantic Scholar search failed: {e}")
             return []
+    
+    def search_by_title_match(self, title: str) -> Optional[Dict]:
+        """Find best matching paper by exact title match."""
+        try:
+            match_url = f"{self.base_url}/paper/search/match"
+            params = {
+                "query": title,
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount"
+            }
+            
+            response = requests.get(match_url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            # The match endpoint returns a single best match in 'data' field
+            if data and "data" in data and data["data"]:
+                return data["data"][0] if isinstance(data["data"], list) else data["data"]
+            return None
+            
+        except Exception as e:
+            error_str = str(e)
+            if '429' in error_str:
+                print("\033[93m⚠️  Semantic Scholar: Rate limited\033[0m")
+            elif '404' in error_str:
+                # 404 is normal - paper not found, no need to log
+                pass
+            else:
+                logger.error(f"Semantic Scholar title match failed: {e}")
+            return None
+    
+    def get_paper_by_doi(self, doi: str) -> Optional[Dict]:
+        """Get paper metadata by DOI."""
+        try:
+            # Clean DOI
+            clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
+            paper_url = f"{self.base_url}/paper/DOI:{clean_doi}"
+            params = {
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount,referenceCount"
+            }
+            
+            response = requests.get(paper_url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            
+            return response.json()
+            
+        except Exception as e:
+            error_str = str(e)
+            if '429' in error_str:
+                print("\033[93m⚠️  Semantic Scholar: Rate limited\033[0m")
+            elif '404' in error_str:
+                # 404 is normal - paper not found, no need to log
+                pass
+            else:
+                logger.error(f"Semantic Scholar DOI lookup failed for {doi}: {e}")
+            return None
+    
+    def get_paper_by_arxiv(self, arxiv_id: str) -> Optional[Dict]:
+        """Get paper metadata by arXiv ID."""
+        try:
+            # Clean arXiv ID
+            clean_id = arxiv_id.strip().replace("arXiv:", "")
+            paper_url = f"{self.base_url}/paper/ARXIV:{clean_id}"
+            params = {
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount"
+            }
+            
+            response = requests.get(paper_url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            
+            return response.json()
+            
+        except Exception as e:
+            error_str = str(e)
+            if '429' in error_str:
+                print("\033[93m⚠️  Semantic Scholar: Rate limited\033[0m")
+            elif '404' in error_str:
+                # 404 is normal - paper not found, no need to log
+                pass
+            else:
+                logger.error(f"Semantic Scholar arXiv lookup failed for {arxiv_id}: {e}")
+            return None
+    
     
     def extract_bibtex_fields(self, s2_data: Dict) -> Dict:
         """Extract BibTeX fields from Semantic Scholar response."""
@@ -229,8 +318,11 @@ class SemanticScholarTool:
             if "abstract" in s2_data:
                 fields["abstract"] = s2_data["abstract"]
             
-            if "journal" in s2_data and s2_data["journal"]:
-                fields["journal"] = s2_data["journal"].get("name", "")
+            # Handle both venue and journal
+            if "venue" in s2_data and s2_data["venue"]:
+                fields["journal"] = s2_data["venue"]
+            elif "journal" in s2_data and s2_data["journal"]:
+                fields["journal"] = s2_data["journal"].get("name", "") if isinstance(s2_data["journal"], dict) else s2_data["journal"]
             
             # Extract DOI from external IDs
             if "externalIds" in s2_data and s2_data["externalIds"]:
@@ -240,7 +332,150 @@ class SemanticScholarTool:
                 if "ArXiv" in external_ids:
                     fields["arxiv_id"] = external_ids["ArXiv"]
             
+            # URL
+            if "url" in s2_data:
+                fields["url"] = s2_data["url"]
+            
+            # Citation count (for confidence scoring)
+            if "citationCount" in s2_data:
+                fields["citationCount"] = s2_data["citationCount"]
+            
         except Exception as e:
             logger.error(f"Failed to extract BibTeX fields from S2 data: {e}")
         
         return fields
+
+
+class OpenAlexTool:
+    """OpenAlex API tool for academic paper lookup (free, no API key needed, no rate limits)."""
+    
+    def __init__(self, email: Optional[str] = None):
+        self.base_url = "https://api.openalex.org"
+        # OpenAlex encourages including email for polite pool (faster access)
+        self.headers = {}
+        if email:
+            self.headers["User-Agent"] = f"SciLib/1.0 (mailto:{email})"
+    
+    def search_by_title(self, title: str, limit: int = 5) -> List[Dict]:
+        """Search OpenAlex by title."""
+        try:
+            search_url = f"{self.base_url}/works"
+            params = {
+                "search": title,
+                "per_page": limit,
+                "select": "id,doi,title,display_name,publication_year,authorships,abstract_inverted_index,primary_location,type,cited_by_count,biblio"
+            }
+            
+            response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
+            response.raise_for_status()
+            
+            data = response.json()
+            return data.get("results", [])
+            
+        except Exception as e:
+            logger.error(f"OpenAlex search failed: {e}")
+            return []
+    
+    def search_by_doi(self, doi: str) -> Optional[Dict]:
+        """Get paper metadata by DOI."""
+        try:
+            # Clean DOI
+            clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
+            paper_url = f"{self.base_url}/works/doi:{clean_doi}"
+            
+            response = requests.get(paper_url, headers=self.headers, timeout=10)
+            response.raise_for_status()
+            
+            return response.json()
+            
+        except Exception as e:
+            logger.error(f"OpenAlex DOI lookup failed for {doi}: {e}")
+            return None
+    
+    def extract_bibtex_fields(self, openalex_data: Dict) -> Dict:
+        """Extract BibTeX fields from OpenAlex response."""
+        fields = {}
+        
+        try:
+            # Title - OpenAlex uses 'display_name' or 'title'
+            if "display_name" in openalex_data:
+                fields["title"] = openalex_data["display_name"]
+            elif "title" in openalex_data:
+                fields["title"] = openalex_data["title"]
+            
+            # Authors
+            if "authorships" in openalex_data:
+                authors = []
+                for authorship in openalex_data["authorships"]:
+                    author_data = authorship.get("author", {})
+                    author_name = author_data.get("display_name", "")
+                    if author_name:
+                        authors.append(author_name)
+                if authors:
+                    fields["authors"] = "; ".join(authors)
+            
+            # Year
+            if "publication_year" in openalex_data and openalex_data["publication_year"]:
+                fields["year"] = openalex_data["publication_year"]
+            
+            # Abstract (OpenAlex stores as inverted index)
+            if "abstract_inverted_index" in openalex_data and openalex_data["abstract_inverted_index"]:
+                abstract = self._reconstruct_abstract(openalex_data["abstract_inverted_index"])
+                if abstract:
+                    fields["abstract"] = abstract
+            
+            # Journal/Venue
+            if "primary_location" in openalex_data and openalex_data["primary_location"]:
+                location = openalex_data["primary_location"]
+                source = location.get("source", {})
+                if source and source.get("display_name"):
+                    fields["journal"] = source["display_name"]
+            
+            # DOI
+            if "doi" in openalex_data and openalex_data["doi"]:
+                # OpenAlex DOI comes as URL, extract just the DOI
+                doi_url = openalex_data["doi"]
+                fields["doi"] = doi_url.replace("https://doi.org/", "")
+            
+            # Volume, Issue, Pages from biblio
+            if "biblio" in openalex_data and openalex_data["biblio"]:
+                biblio = openalex_data["biblio"]
+                if biblio.get("volume"):
+                    fields["volume"] = biblio["volume"]
+                if biblio.get("issue"):
+                    fields["number"] = biblio["issue"]
+                if biblio.get("first_page") and biblio.get("last_page"):
+                    fields["pages"] = f"{biblio['first_page']}-{biblio['last_page']}"
+                elif biblio.get("first_page"):
+                    fields["pages"] = biblio["first_page"]
+            
+            # URL - use OpenAlex ID as URL
+            if "id" in openalex_data:
+                fields["url"] = openalex_data["id"]
+            
+            # Citation count (for confidence scoring)
+            if "cited_by_count" in openalex_data:
+                fields["citationCount"] = openalex_data["cited_by_count"]
+            
+        except Exception as e:
+            logger.error(f"Failed to extract BibTeX fields from OpenAlex data: {e}")
+        
+        return fields
+    
+    def _reconstruct_abstract(self, inverted_index: Dict) -> str:
+        """Reconstruct abstract text from OpenAlex inverted index."""
+        try:
+            # Inverted index maps words to their positions
+            word_positions = []
+            for word, positions in inverted_index.items():
+                for pos in positions:
+                    word_positions.append((pos, word))
+            
+            # Sort by position and join
+            word_positions.sort()
+            abstract = " ".join([word for _, word in word_positions])
+            return abstract
+            
+        except Exception as e:
+            logger.error(f"Failed to reconstruct abstract: {e}")
+            return ""
