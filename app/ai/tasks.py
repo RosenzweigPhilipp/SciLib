@@ -31,7 +31,7 @@ if Celery:
     celery_app = Celery(
         "scilib_ai",
         broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-        backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+        backend=os.getenv("CELERY_RESULT_BACKEND", os.getenv("DATABASE_URL", "postgresql://username:password@localhost/scilib"))
     )
     
     # Celery configuration
@@ -52,14 +52,13 @@ else:
 
 
 @celery_app.task(bind=True, name="extract_pdf_metadata")
-def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int, use_llm: bool = False) -> Dict[str, Any]:
+def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool = False) -> Dict[str, Any]:
     """
     Celery task for extracting metadata from PDF files.
     
     Args:
         pdf_path: Path to the PDF file
         paper_id: Database ID of the paper record
-        user_id: ID of the user who uploaded the paper
         use_llm: Whether to use LLM for higher accuracy (slower and costs tokens)
         
     Returns:
@@ -90,6 +89,9 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int, 
         # Log missing credentials for easier debugging
         if use_llm and not os.getenv("OPENAI_API_KEY"):
             logger.warning("OPENAI_API_KEY not set in worker environment; LLM calls will fail or fallback will be used.")
+        
+        # Import asyncio for running async pipeline
+        import asyncio
         
         # Update progress
         self.update_state(
@@ -181,7 +183,6 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int, 
         return {
             "status": final_status,
             "paper_id": paper_id,
-            "user_id": user_id,
             "extraction_data": result,
             "completed_at": datetime.now().isoformat()
         }
@@ -202,7 +203,6 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, user_id: int, 
         return {
             "status": "FAILURE",
             "paper_id": paper_id,
-            "user_id": user_id,
             "error": str(e),
             "failed_at": datetime.now().isoformat()
         }
@@ -224,10 +224,8 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
         from ..database import SessionLocal
         from ..database import Paper as PaperModel
         
-        # Create database session directly
-        db = SessionLocal()
-        
-        try:
+        # Create database session with context manager
+        with SessionLocal() as db:
             # Find the paper
             paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
             if not paper:
@@ -313,20 +311,12 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
             logger.info(f"Successfully updated paper {paper_id} with extraction results")
             return True
             
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Database error updating paper {paper_id}: {e}")
-            return False
-        
-        finally:
-            db.close()
-            
     except Exception as e:
-        logger.error(f"Failed to get database connection: {e}")
+        logger.error(f\"Failed to get database connection or update paper {paper_id}: {e}\")
         return False
 
 
-def run_extraction_sync(pdf_path: str, paper_id: int, user_id: int = 1) -> Dict[str, Any]:
+def run_extraction_sync(pdf_path: str, paper_id: int) -> Dict[str, Any]:
     """
     Run the extraction pipeline synchronously (useful as a fallback when Celery is unavailable).
     This mirrors the behavior in `minimals/pipeline/test_extraction.py`.

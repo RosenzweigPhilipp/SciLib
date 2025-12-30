@@ -6,6 +6,7 @@ import httpx
 from typing import Dict, Optional, List
 import logging
 from urllib.parse import quote
+from ..utils import retry_with_exponential_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -19,37 +20,37 @@ class CrossRefTool:
             "User-Agent": f"SciLib/1.0 (mailto:{email})" if email else "SciLib/1.0"
         }
     
+    @retry_with_exponential_backoff(
+        max_retries=3,
+        initial_delay=1.0,
+        exceptions=(requests.RequestException, requests.Timeout)
+    )
     def search_by_title(self, title: str, limit: int = 5) -> List[Dict]:
-        """Search for papers by title."""
-        try:
-            query = quote(title)
-            url = f"{self.base_url}?query.title={query}&rows={limit}"
-            
-            response = requests.get(url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            return data.get("message", {}).get("items", [])
-            
-        except Exception as e:
-            logger.error(f"CrossRef title search failed: {e}")
-            return []
+        """Search for papers by title with automatic retry."""
+        query = quote(title)
+        url = f"{self.base_url}?query.title={query}&rows={limit}"
+        
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data.get("message", {}).get("items", [])
     
+    @retry_with_exponential_backoff(
+        max_retries=3,
+        initial_delay=1.0,
+        exceptions=(requests.RequestException, requests.Timeout)
+    )
     def search_by_doi(self, doi: str) -> Optional[Dict]:
-        """Get metadata by DOI."""
-        try:
-            clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
-            url = f"{self.base_url}/{quote(clean_doi, safe='')}"
-            
-            response = requests.get(url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            return data.get("message")
-            
-        except Exception as e:
-            logger.error(f"CrossRef DOI lookup failed for {doi}: {e}")
-            return None
+        """Get metadata by DOI with automatic retry."""
+        clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
+        url = f"{self.base_url}/{quote(clean_doi, safe='')}"
+        
+        response = requests.get(url, headers=self.headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data.get("message")
     
     def extract_bibtex_fields(self, crossref_data: Dict) -> Dict:
         """Extract BibTeX fields from CrossRef response."""

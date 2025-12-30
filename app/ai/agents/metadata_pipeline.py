@@ -35,23 +35,37 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 def debug_log(message: str, color: str = Colors.OKBLUE):
-    """Print colored debug message if DEBUG is enabled."""
+    """Log debug message if DEBUG is enabled. Uses logging instead of print."""
     if DEBUG:
+        # In debug mode, print colored output to console for readability
         print(f"{color}{message}{Colors.ENDC}")
+    # Always log properly (will go to log files in production)
+    logger.debug(message)
 
 def debug_result(tool_name: str, result: Any, confidence: float = None):
-    """Print formatted tool result with color."""
+    """Log formatted tool result."""
+    status = "SUCCESS" if result else "NO_RESULTS"
+    conf_text = f" (confidence: {confidence:.2f})" if confidence else ""
+    log_message = f"{status} - {tool_name}{conf_text}"
+    
     if DEBUG:
+        # Console output with colors in debug mode
         status_color = Colors.OKGREEN if result else Colors.WARNING
-        conf_text = f" (confidence: {confidence:.2f})" if confidence else ""
-        status = "✓ SUCCESS" if result else "✗ NO RESULTS"
-        print(f"{status_color}{status}{Colors.ENDC} - {Colors.BOLD}{tool_name}{Colors.ENDC}{conf_text}")
+        status_symbol = "✓ SUCCESS" if result else "✗ NO RESULTS"
+        print(f"{status_color}{status_symbol}{Colors.ENDC} - {Colors.BOLD}{tool_name}{Colors.ENDC}{conf_text}")
         if result and isinstance(result, dict):
             # Show key fields
             for key in ['title', 'authors', 'doi', 'year', 'journal']:
                 if key in result and result[key]:
                     value = str(result[key])[:80]
                     print(f"  {Colors.OKCYAN}{key}{Colors.ENDC}: {value}")
+    
+    # Always log properly
+    logger.debug(log_message)
+    if result and isinstance(result, dict):
+        for key in ['title', 'authors', 'doi', 'year', 'journal']:
+            if key in result and result[key]:
+                logger.debug(f"  {key}: {str(result[key])[:80]}")
 
 
 class MetadataExtractionPipeline:
@@ -143,9 +157,17 @@ class MetadataExtractionPipeline:
                 debug_log(f"  Extracted {len(pdf_result['text'])} characters from {pdf_result.get('page_count', '?')} pages", Colors.OKGREEN)
             
             if not pdf_result.get("text"):
-                pipeline_result["errors"].append("Failed to extract text from PDF")
+                error_msg = (
+                    "Failed to extract text from PDF. "
+                    "Possible causes: (1) Scanned document without OCR, "
+                    "(2) Password-protected file, (3) Corrupted PDF. "
+                    "Try: Re-scan with OCR, remove password protection, or check file integrity."
+                )
+                pipeline_result["errors"].append(error_msg)
                 pipeline_result["extraction_status"] = "failed"
+                pipeline_result["user_action"] = "manual_entry_required"
                 debug_log("✗ PDF extraction failed - no text found", Colors.FAIL)
+                logger.error(f"Paper {paper_id}: {error_msg}")
                 return pipeline_result
             
             # Step 2: Direct Metadata Extraction (Fast, Free)
@@ -1210,17 +1232,65 @@ If information is not clearly available, use null for that field."""),
     
     def _calculate_confidence(self, metadata: Dict, search_results: Dict, validation_result: Dict, llm_used: bool = False, doi_used: bool = False) -> float:
         """
-        Calculate overall confidence score based on completeness and cross-validation.
+        Calculate overall confidence score for extracted metadata.
         
-        Balanced scoring that rewards both completeness and validation.
-        Prevents false confidence from wrong sources while allowing high scores for correct data.
+        This is the heart of the pipeline's quality assessment. The confidence score (0.0-1.0)
+        indicates how reliable the extracted metadata is based on multiple factors.
         
-        Scoring components:
-        1. Field completeness (40%) - primary indicator
-        2. Source diversity (15%) - having multiple sources
-        3. Cross-validation quality (45%) - sources agreeing
-        4. DOI lookup bonus (5%) - direct DOI lookup used
-        5. LLM enhancement bonus (10%)
+        ## Confidence Score Breakdown:
+        
+        ### 1. Field Completeness (40% total)
+           - Critical fields (30%): title, authors, year
+             * These are essential for paper identification and citation
+             * Missing any of these significantly impacts usefulness
+           - Optional fields (10%): doi, journal, abstract
+             * Nice to have but not critical for basic citation
+        
+        ### 2. Source Diversity (15%)
+           - 0 sources: 0% (only PDF extraction, no validation)
+           - 1 source: 8% (limited validation)
+           - 2 sources: 12% (good cross-validation opportunity)
+           - 3+ sources: 15% (excellent cross-validation)
+        
+        ### 3. Cross-Validation Quality (45%)
+           - Title validation (13%): Sources agree on paper title
+           - Authors validation (13%): Author names consistent across sources
+           - Year validation (5%): Publication year matches
+           - DOI validation (9%): DOI consistent and valid
+           - Journal validation (5%): Publication venue matches
+           
+           Note: This is where incorrect metadata gets caught. If sources disagree,
+           validation scores are reduced even if fields are filled.
+        
+        ### 4. DOI Lookup Bonus (5%)
+           - Direct DOI-based lookup is most reliable
+           - Applies when DOI was extracted from PDF and successfully queried
+        
+        ### 5. LLM Enhancement Bonus (10%)
+           - Applied when LLM was used for analysis/validation
+           - LLM helps resolve conflicts and improve field extraction
+        
+        ## Confidence Thresholds (Guidelines):
+        - 0.90-1.00: Excellent - High confidence, minimal review needed
+        - 0.80-0.89: Good - Acceptable quality, spot check recommended
+        - 0.60-0.79: Fair - Review recommended, some issues likely
+        - 0.40-0.59: Poor - Manual verification required
+        - 0.00-0.39: Failed - Extraction unreliable, manual entry needed
+        
+        ## Examples:
+        - Paper with DOI, all fields, 3 agreeing sources = ~0.95 confidence
+        - Paper with title/authors from 2 sources, no DOI = ~0.70 confidence
+        - Paper with only PDF-extracted title, no validation = ~0.35 confidence
+        
+        Args:
+            metadata: Extracted metadata dictionary
+            search_results: Results from scientific API searches
+            validation_result: Cross-validation results between sources
+            llm_used: Whether LLM was used in extraction
+            doi_used: Whether DOI-based lookup was performed
+        
+        Returns:
+            float: Confidence score between 0.0 and 1.0
         """
         confidence = 0.0
         breakdown = []

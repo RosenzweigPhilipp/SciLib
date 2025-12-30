@@ -304,6 +304,9 @@ class PaperManager {
     constructor() {
         this.papers = [];
         this.currentEditingId = null;
+        this.currentPage = 1;
+        this.itemsPerPage = 20;
+        this.totalPapers = 0;
         this.setupPaperHandlers();
     }
 
@@ -372,15 +375,72 @@ class PaperManager {
         if (papersListEl) console.log('DEBUG: Attached papers list delegation listener');
     }
 
-    async loadPapers() {
+    async loadPapers(page = null) {
         try {
+            if (page !== null) {
+                this.currentPage = page;
+            }
+            
+            const skip = (this.currentPage - 1) * this.itemsPerPage;
+            
             UIComponents.setLoading(document.getElementById('papers-list'));
-            this.papers = await API.papers.list({ limit: 100 });
+            
+            // Load papers with pagination
+            this.papers = await API.papers.list({ 
+                skip: skip,
+                limit: this.itemsPerPage
+            });
+            
+            // Get total count (we'll need to add this to the API response)
+            // For now, estimate based on returned results
+            this.totalPapers = this.papers.length < this.itemsPerPage ? 
+                skip + this.papers.length : 
+                (this.currentPage + 1) * this.itemsPerPage; // Estimate there's at least one more page
+            
             this.displayPapers(this.papers);
+            this.renderPagination();
         } catch (error) {
             console.error('Error loading papers:', error);
             UIComponents.showNotification('Failed to load papers', 'error');
         }
+    }
+    
+    renderPagination() {
+        const container = document.getElementById('papers-pagination');
+        if (!container) return;
+        
+        const totalPages = Math.ceil(this.totalPapers / this.itemsPerPage);
+        
+        // Hide pagination if only one page
+        if (totalPages <= 1) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'flex';
+        container.innerHTML = '';
+        
+        // Previous button
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'pagination-btn';
+        prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+        prevBtn.disabled = this.currentPage === 1;
+        prevBtn.addEventListener('click', () => this.loadPapers(this.currentPage - 1));
+        container.appendChild(prevBtn);
+        
+        // Page info
+        const pageInfo = document.createElement('span');
+        pageInfo.className = 'pagination-info';
+        pageInfo.textContent = `Page ${this.currentPage}`;
+        container.appendChild(pageInfo);
+        
+        // Next button
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'pagination-btn';
+        nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+        nextBtn.disabled = this.papers.length < this.itemsPerPage;
+        nextBtn.addEventListener('click', () => this.loadPapers(this.currentPage + 1));
+        container.appendChild(nextBtn);
     }
 
     displayPapers(papers) {

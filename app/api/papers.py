@@ -106,8 +106,7 @@ async def upload_paper(file: UploadFile = File(...), db: Session = Depends(get_d
             # Start the background task for metadata extraction
             task = extract_pdf_metadata_task.delay(
                 pdf_path=file_path,
-                paper_id=paper.id,
-                user_id=1  # Default user ID for now
+                paper_id=paper.id
             )
             task_id = task.id
             print(f"DEBUG: Started AI extraction task {task.id} for paper {paper.id}")
@@ -291,7 +290,7 @@ async def re_extract_metadata(paper_id: int, request: ReExtractRequest, db: Sess
             print(f"DEBUG: {logger_msg}")
             
             task = extract_pdf_metadata_task.apply_async(
-                args=[paper.file_path, paper.id, 1],
+                args=[paper.file_path, paper.id],
                 kwargs={'use_llm': request.use_llm}
             )
             task_id = task.id

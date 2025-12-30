@@ -28,10 +28,15 @@ app = FastAPI(
     debug=settings.debug
 )
 
-# Configure CORS
+# Configure CORS - restrict to localhost only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",  # For development frontends
+        "http://127.0.0.1:3000"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,9 +70,8 @@ async def api_health_check():
     from .database import SessionLocal
     try:
         # Test database connection
-        db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
+        with SessionLocal() as db:
+            db.execute("SELECT 1")
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -86,22 +90,19 @@ async def get_stats():
     from datetime import datetime, timedelta
     
     try:
-        db = SessionLocal()
-        
-        # Count papers
-        total_papers = db.query(Paper).count()
-        
-        # Count collections
-        total_collections = db.query(Collection).count()
-        
-        # Count tags
-        total_tags = db.query(Tag).count()
-        
-        # Count recent uploads (last 30 days)
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        recent_uploads = db.query(Paper).filter(Paper.created_at > thirty_days_ago).count()
-        
-        db.close()
+        with SessionLocal() as db:
+            # Count papers
+            total_papers = db.query(Paper).count()
+            
+            # Count collections
+            total_collections = db.query(Collection).count()
+            
+            # Count tags
+            total_tags = db.query(Tag).count()
+            
+            # Count recent uploads (last 30 days)
+            thirty_days_ago = datetime.now() - timedelta(days=30)
+            recent_uploads = db.query(Paper).filter(Paper.created_at > thirty_days_ago).count()
         
         return {
             "total_papers": total_papers,
