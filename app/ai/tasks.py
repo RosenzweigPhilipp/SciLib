@@ -554,3 +554,152 @@ def generate_paper_embedding_task(self, paper_id: int, force_regenerate: bool = 
             "error": str(e),
             "failed_at": datetime.now().isoformat()
         }
+
+
+@celery_app.task(bind=True, name="generate_paper_summary")
+def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = False) -> Dict[str, Any]:
+    """
+    Celery task for generating AI summaries for a paper.
+    
+    Args:
+        paper_id: Database ID of the paper
+        force_regenerate: If True, regenerate even if summary already exists
+        
+    Returns:
+        Dict with summary generation results
+    """
+    try:
+        # Update task status
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 0,
+                "total": 100,
+                "status": "Initializing summary generation..."
+            }
+        )
+        
+        logger.info(f"Starting summary generation for paper {paper_id} (task id: {getattr(self.request, 'id', None)}, force: {force_regenerate})")
+        
+        # Import here to avoid circular imports
+        from ..database import SessionLocal
+        from ..database import Paper as PaperModel
+        from .services.summary_service import SummaryService
+        import asyncio
+        
+        # Get paper from database
+        with SessionLocal() as db:
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+            if not paper:
+                logger.error(f"Paper {paper_id} not found in database")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found",
+                    "failed_at": datetime.now().isoformat()
+                }
+            
+            # Check if summary already exists
+            if paper.ai_summary_short is not None and not force_regenerate:
+                logger.info(f"Paper {paper_id} already has summary, skipping")
+                return {
+                    "status": "SUCCESS",
+                    "paper_id": paper_id,
+                    "message": "Summary already exists",
+                    "skipped": True,
+                    "completed_at": datetime.now().isoformat()
+                }
+            
+            # Extract paper information
+            title = paper.title
+            abstract = paper.abstract
+            
+            if not title:
+                logger.error(f"Paper {paper_id} has no title, cannot generate summary")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper has no title",
+                    "failed_at": datetime.now().isoformat()
+                }
+        
+        # Update progress
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 20,
+                "total": 100,
+                "status": "Generating summaries..."
+            }
+        )
+        
+        # Generate all summaries in parallel
+        short_summary, detailed_summary, key_findings = asyncio.run(
+            SummaryService.generate_complete_summary(title, abstract)
+        )
+        
+        # Check if at least one component was generated
+        if short_summary is None and detailed_summary is None and key_findings is None:
+            logger.error(f"Failed to generate any summary components for paper {paper_id}")
+            return {
+                "status": "FAILURE",
+                "paper_id": paper_id,
+                "error": "All summary generation attempts failed",
+                "failed_at": datetime.now().isoformat()
+            }
+        
+        # Update progress
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 80,
+                "total": 100,
+                "status": "Saving summaries to database..."
+            }
+        )
+        
+        # Save to database
+        with SessionLocal() as db:
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+            if paper:
+                if short_summary:
+                    paper.ai_summary_short = short_summary
+                if detailed_summary:
+                    paper.ai_summary_long = detailed_summary
+                if key_findings:
+                    paper.ai_key_findings = key_findings
+                paper.summary_generated_at = datetime.now()
+                db.commit()
+                
+                logger.info(f"Successfully saved summaries for paper {paper_id}")
+                logger.info(f"  - Short: {len(short_summary) if short_summary else 0} chars")
+                logger.info(f"  - Detailed: {len(detailed_summary) if detailed_summary else 0} chars")
+                logger.info(f"  - Findings: {len(key_findings) if key_findings else 0} items")
+            else:
+                logger.error(f"Paper {paper_id} not found when saving summaries")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found when saving",
+                    "failed_at": datetime.now().isoformat()
+                }
+        
+        return {
+            "status": "SUCCESS",
+            "paper_id": paper_id,
+            "generated_components": {
+                "short_summary": short_summary is not None,
+                "detailed_summary": detailed_summary is not None,
+                "key_findings": key_findings is not None
+            },
+            "completed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Summary generation failed for paper {paper_id}: {str(e)}", exc_info=True)
+        return {
+            "status": "FAILURE",
+            "paper_id": paper_id,
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }
