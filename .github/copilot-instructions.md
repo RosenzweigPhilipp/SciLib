@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-SciLib is an AI-powered scientific literature manager with PDF metadata extraction. Built with FastAPI backend, PostgreSQL database, vanilla JavaScript frontend, and multi-stage AI pipeline using LangChain + scientific APIs (CrossRef, arXiv, Semantic Scholar, OpenAlex).
+SciLib is an AI-powered scientific literature manager with PDF metadata extraction. Built with FastAPI backend, PostgreSQL database, vanilla JavaScript frontend, and multi-stage AI pipeline using scientific APIs (CrossRef, arXiv, Semantic Scholar, OpenAlex) with optional GPT-4o-mini validation.
 
 ## Architecture
 
@@ -77,7 +77,6 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **Manual testing**: `minimals/` contains standalone examples (no pytest suite yet)
   - `example_crossref.py`: Test CrossRef API integration
   - `example_exa.py`: Test Exa search integration
-  - `example_langchain.py`: Test LangChain components
 - **Pipeline testing**: `minimals/pipeline/test_extraction.py` for metadata pipeline
 
 ### Debugging AI Extraction

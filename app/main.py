@@ -1,24 +1,11 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Header
+from fastapi import FastAPI, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
 from .config import settings
 from .api import papers, collections, tags
 from .ai import endpoints as ai_endpoints
-
-# Simple API key authentication with debug logging
-def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    print(f"DEBUG: Received API key: {x_api_key}")
-    print(f"DEBUG: Expected API key: {settings.api_key}")
-    if not x_api_key or x_api_key != settings.api_key:
-        print(f"DEBUG: Authentication failed - key mismatch")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key. Use X-API-Key header."
-        )
-    print(f"DEBUG: Authentication successful")
-    return x_api_key
+from .auth import verify_api_key
 
 # Create FastAPI app
 app = FastAPI(
@@ -68,10 +55,11 @@ async def health_check():
 async def api_health_check():
     """API health check endpoint - no auth required"""
     from .database import SessionLocal
+    from sqlalchemy import text
     try:
         # Test database connection
         with SessionLocal() as db:
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
         db_status = f"error: {str(e)}"

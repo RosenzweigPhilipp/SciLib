@@ -2,7 +2,7 @@
 Simplified AI endpoints for SciLib metadata extraction.
 Minimal version that works with session token authentication.
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 import logging
@@ -11,20 +11,9 @@ import os
 from ..database.connection import get_db
 from ..database.models import Paper
 from ..config import settings
-
-from typing import Optional
+from ..auth import verify_api_key
 
 logger = logging.getLogger(__name__)
-
-# Local API key header verifier so these endpoints accept the same
-# `X-API-Key` header used by the frontend (avoid circular imports)
-def verify_api_key_header(x_api_key: Optional[str] = Header(None)) -> str:
-    if not x_api_key or x_api_key != settings.api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key. Use X-API-Key header.",
-        )
-    return x_api_key
 
 # Create router
 router = APIRouter(prefix="/api/ai", tags=["AI"])
@@ -48,7 +37,7 @@ async def health_check():
 async def start_extraction(
     paper_id: int,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key_header)
+    _: str = Depends(verify_api_key)
 ):
     """Start metadata extraction for a paper."""
     
@@ -79,7 +68,7 @@ async def start_extraction(
 @router.get("/status/{task_id}")
 async def get_task_status(
     task_id: str,
-    _: str = Depends(verify_api_key_header)
+    _: str = Depends(verify_api_key)
 ):
     """Get extraction task status."""
     
@@ -103,7 +92,7 @@ async def get_task_status(
 async def get_extraction_results(
     paper_id: int,
     db: Session = Depends(get_db),
-    _: str = Depends(verify_api_key_header)
+    _: str = Depends(verify_api_key)
 ):
     """Get extraction results for a paper."""
     

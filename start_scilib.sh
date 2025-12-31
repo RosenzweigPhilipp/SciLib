@@ -68,7 +68,7 @@ start_redis() {
 
 # Check Python environment
 check_python_env() {
-    if python -c "import fastapi, langchain, celery" > /dev/null 2>&1; then
+    if python -c "import fastapi, celery" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} Python dependencies available"
     else
         echo -e "${YELLOW}⚠${NC} Missing dependencies. Installing..."
