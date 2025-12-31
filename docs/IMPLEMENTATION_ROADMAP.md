@@ -12,20 +12,23 @@ Each feature will be developed in isolation on a dedicated branch, allowing for:
 
 ## 🎯 Priority Matrix
 
+### ✅ Completed
+1. ✅ pgvector Setup (Branch 1) - Vector database infrastructure
+2. ✅ Paper Summarization (Branch 2) - AI-generated paper summaries
+3. ✅ Vector Search in Library (Branch 3) - Semantic search foundation
+4. ✅ Paper Recommendations (Branch 4) - Multi-strategy internal recommendations
+
 ### High Priority (Core Value)
-1. Paper Summarization (immediate user value)
-2. Vector Search in Library (foundation for everything)
-3. Paper Recommendations (internal)
+5. External Paper Discovery (Branch 5)
+6. Citation Analysis (Branch 6)
 
 ### Medium Priority (Enhanced Discovery)
-4. External Paper Discovery
-5. Literature Generator
-6. Research Assistant Chat
+7. Literature Generator (Branch 7)
+8. Research Assistant Chat (Branch 8)
 
 ### Low Priority (Nice-to-Have)
-7. Citation Graph Visualization
-8. Reading List Optimizer
-9. Auto-tagging
+9. Reading List Optimizer (Branch 9)
+10. Auto-tagging (Branch 10)
 
 ---
 
