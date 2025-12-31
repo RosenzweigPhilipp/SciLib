@@ -120,23 +120,94 @@ UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=50000000
 ```
 
-## 🚧 Development Status
+## 🚧 Development Roadmap
 
-**Current Phase**: Core Infrastructure Complete ✅
+**Project Phase**: AI Integration Complete ✅
 
+### Phase 1: Core Infrastructure ✅ COMPLETE
 - ✅ Backend API with FastAPI
-- ✅ Database models and relationships  
-- ✅ File upload system
+- ✅ PostgreSQL database with SQLAlchemy ORM
+- ✅ File upload and PDF storage system
 - ✅ Frontend interface with CRUD operations
-- ✅ Session-based authentication
+- ✅ Session-based authentication with X-API-Key
 - ✅ Paper, collection, and tag management
 
-**Next Phase**: AI Integration 🔄
+### Phase 2: AI Integration ✅ COMPLETE
 
-- 🔄 PDF metadata extraction
-- 🔄 Semantic search capabilities
-- 🔄 AI-powered paper summarization
-- 🔄 Citation network analysis
+#### Branch 1: Vector Database Setup ✅
+- ✅ PostgreSQL pgvector extension
+- ✅ Vector embedding storage
+- ✅ Similarity search infrastructure
+
+#### Branch 2: Paper Summarization ✅
+- ✅ AI-powered paper summaries (short/long/key findings)
+- ✅ OpenAI GPT-4o-mini integration
+- ✅ Background processing with Celery
+- ✅ PDF text extraction pipeline
+
+#### Branch 3: Vector Search ✅
+- ✅ Semantic search using OpenAI embeddings
+- ✅ Hybrid search (semantic + keyword)
+- ✅ Automatic embedding generation
+- ✅ Cosine similarity ranking
+
+#### Branch 4: Internal Recommendations ✅
+- ✅ Similar paper recommendations
+- ✅ Hybrid ranking (embedding + metadata)
+- ✅ Recommendation scoring system
+- ✅ Collection-based filtering
+
+#### Branch 5: External Paper Discovery ✅
+- ✅ Multi-source search (Semantic Scholar, arXiv, CrossRef, OpenAlex)
+- ✅ DOI-based deduplication
+- ✅ Relevance ranking (position + citations)
+- ✅ Direct import to library
+- ✅ Library status detection
+
+#### Branch 6: Citation Analysis ✅
+- ✅ Citation network tracking
+- ✅ Influence score calculation (4-factor formula)
+- ✅ H-index and centrality metrics
+- ✅ External citation data (Semantic Scholar API)
+- ✅ Citation network visualization support
+- ✅ Cluster detection (connected components)
+- ✅ Most influential/cited papers queries
+
+### Phase 3: Literature Intelligence 🔄 IN PROGRESS
+
+#### Branch 7: Literature Review Generator 🔄 NEXT
+- 🔄 Automated literature review generation
+- 🔄 Citation-aware summaries
+- 🔄 Research gap identification
+- 🔄 Markdown/PDF export
+
+### Phase 4: Frontend Enhancement 📋 PLANNED
+- 📋 Citation network visualization (D3.js/Cytoscape.js)
+- 📋 Interactive influence rankings
+- 📋 Advanced search UI with filters
+- 📋 Literature review editor
+- 📋 Export templates and formatting
+
+## 🎯 Key Features Implemented
+
+### AI-Powered Metadata Extraction
+- **DOI-First Strategy**: Extract DOI from PDF → query scientific APIs
+- **Multi-API Search**: CrossRef, arXiv, Semantic Scholar, OpenAlex
+- **LLM Validation**: Optional GPT-4o-mini for conflict resolution
+- **Confidence Scoring**: 0.0-1.0 confidence with source tracking
+
+### Semantic Search & Discovery
+- **Embedding Generation**: OpenAI text-embedding-3-small
+- **Vector Search**: pgvector with cosine similarity
+- **Hybrid Ranking**: Combines semantic and keyword relevance
+- **External Discovery**: Search 4 scientific databases simultaneously
+
+### Citation Intelligence
+- **Bidirectional Tracking**: Papers cited and citing relationships
+- **Influence Metrics**: Composite score (citations, velocity, h-index, centrality)
+- **Network Analysis**: Cluster detection and centrality calculations
+- **External Integration**: Semantic Scholar citation counts
+- **Auto-Updates**: Database triggers for real-time count maintenance
 
 ## 🤝 Contributing
 
