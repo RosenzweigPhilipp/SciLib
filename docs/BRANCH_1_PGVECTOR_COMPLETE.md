@@ -1,10 +1,16 @@
-# Branch 1: pgvector-setup - Implementation Complete ✅
+# Branch 1: pgvector-setup - ✅ COMPLETE
 
 ## What Was Implemented
 
-All core functionality for vector embeddings has been implemented:
+All core functionality for vector embeddings has been implemented and tested:
 
-### ✅ 1. Dependencies Added
+### ✅ 1. PostgreSQL Upgrade
+- **Migrated from PostgreSQL 14 → 17**
+- Used `pg_upgrade` to preserve all existing data
+- PostgreSQL 17 has native pgvector support (no manual compilation needed)
+- Set as default PostgreSQL version in PATH
+
+### ✅ 2. Dependencies Added
 - `pgvector>=0.2.4` - PostgreSQL vector extension Python client
 - `numpy>=1.24.0` - For vector operations (cosine similarity)
 
@@ -52,53 +58,26 @@ All core functionality for vector embeddings has been implemented:
 
 ---
 
-## ⚠️ Manual Installation Required
+## ✅ Installation Complete
 
-**Issue:** pgvector is installed via Homebrew but only for PostgreSQL 17/18. You're using PostgreSQL 14.
+**All tests passing!** pgvector is fully functional on PostgreSQL 17.
 
-### Option 1: Link Extension Files (Quick)
+### Test Results:
+```
+✓ PASS: pgvector extension
+✓ PASS: Embedding columns
+✓ PASS: Embedding generation
+✓ PASS: Embedding storage
+✓ PASS: Similarity search
 
-Run these commands in your terminal:
-
-```bash
-# Link pgvector files to PostgreSQL 14
-sudo ln -sf /opt/homebrew/Cellar/pgvector/0.8.1/share/postgresql@17/extension/* /opt/homebrew/share/postgresql@14/extension/
-sudo ln -sf /opt/homebrew/Cellar/pgvector/0.8.1/lib/postgresql@17/* /opt/homebrew/lib/postgresql@14/
+Total: 5/5 tests passed
 ```
 
-### Option 2: Build from Source (Recommended)
-
-```bash
-cd /tmp
-git clone --branch v0.8.1 https://github.com/pgvector/pgvector.git
-cd pgvector
-make PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
-sudo make install PG_CONFIG=/opt/homebrew/opt/postgresql@14/bin/pg_config
-```
-
-### Then Run Migrations
-
-After installing pgvector for PostgreSQL 14:
-
-```bash
-# Enable pgvector extension
-psql postgresql://scilib_user:scilib_password@localhost/scilib_db -f app/database/migrations/001_enable_pgvector.sql
-
-# Add embedding columns
-psql postgresql://scilib_user:scilib_password@localhost/scilib_db -f app/database/migrations/002_add_embedding_columns.sql
-```
-
-### Run Test Suite
-
-```bash
-python minimals/test_pgvector.py
-```
-
-This will verify:
-- pgvector extension is enabled
-- Embedding columns exist
-- Embedding generation works
-- Vector similarity search works
+### PostgreSQL Migration:
+- Migrated from PostgreSQL 14 to 17 using `pg_upgrade`
+- All data preserved
+- pgvector extension enabled
+- Embedding columns added
 
 ---
 
@@ -245,4 +224,4 @@ Embeddings can be cached indefinitely and only regenerated when paper metadata c
 
 ---
 
-**Status:** ✅ Code Complete, ⚠️ Manual Installation Required
+**Status:** ✅ **Complete and Tested** - Ready to merge to main!
