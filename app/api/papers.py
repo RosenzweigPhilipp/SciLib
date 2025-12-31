@@ -37,6 +37,12 @@ class Paper(BaseModel):
     extraction_metadata: Optional[Any] = None  # Can be JSON string or parsed object
     extracted_at: Optional[datetime] = None
     
+    # AI Summary fields
+    ai_summary_short: Optional[str] = None
+    ai_summary_long: Optional[str] = None
+    ai_key_findings: Optional[List[str]] = None
+    summary_generated_at: Optional[datetime] = None
+    
     class Config:
         from_attributes = True
 
@@ -318,4 +324,93 @@ async def re_extract_metadata(paper_id: int, request: ReExtractRequest, db: Sess
         "task_id": task_id,
         "status": "processing",
         "message": "High-accuracy extraction started with LLM" if request.use_llm else "Standard extraction started"
+    }
+
+
+@router.get("/{paper_id}/summary")
+async def get_paper_summary(paper_id: int, db: Session = Depends(get_db)):
+    """
+    Get AI-generated summary for a paper.
+    
+    Returns short summary, detailed summary, and key findings if available.
+    """
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper not found"
+        )
+    
+    return {
+        "paper_id": paper.id,
+        "title": paper.title,
+        "short_summary": paper.ai_summary_short,
+        "detailed_summary": paper.ai_summary_long,
+        "key_findings": paper.ai_key_findings,
+        "generated_at": paper.summary_generated_at,
+        "has_summary": paper.ai_summary_short is not None
+    }
+
+
+class SummarizePaperRequest(BaseModel):
+    force_regenerate: bool = False
+
+
+@router.post("/{paper_id}/summarize")
+async def generate_paper_summary(
+    paper_id: int, 
+    request: SummarizePaperRequest = SummarizePaperRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate or regenerate AI summary for a paper.
+    
+    Triggers a background task to generate short summary, detailed summary, 
+    and key findings.
+    """
+    # Import task here to avoid circular dependency
+    try:
+        from ..ai.tasks import generate_paper_summary_task
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Summarization service not available"
+        )
+    
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper not found"
+        )
+    
+    # Check if summary already exists
+    if paper.ai_summary_short and not request.force_regenerate:
+        return {
+            "paper_id": paper.id,
+            "status": "exists",
+            "message": "Summary already exists. Use force_regenerate=true to regenerate."
+        }
+    
+    # Trigger summarization task
+    try:
+        task = generate_paper_summary_task.apply_async(
+            args=[paper.id],
+            kwargs={'force_regenerate': request.force_regenerate}
+        )
+        task_id = task.id
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start summarization: {str(e)}"
+        )
+    
+    return {
+        "paper_id": paper.id,
+        "task_id": task_id,
+        "status": "processing",
+        "message": "Summary generation started"
     }

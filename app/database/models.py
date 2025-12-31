@@ -48,6 +48,12 @@ class Paper(Base):
     embedding_title_abstract = Column(Vector(1536))  # OpenAI text-embedding-3-small
     embedding_generated_at = Column(DateTime(timezone=True))
     
+    # AI Summary fields
+    ai_summary_short = Column(Text)  # ~50 word summary
+    ai_summary_long = Column(Text)  # ~200 word detailed summary
+    ai_key_findings = Column(JSON)  # List of key findings/bullet points
+    summary_generated_at = Column(DateTime(timezone=True))
+    
     # Relationships
     collections = relationship("Collection", secondary=paper_collections, back_populates="papers")
     tags = relationship("Tag", secondary=paper_tags, back_populates="papers")
