@@ -148,7 +148,7 @@ async def test_embedding_storage():
             
             # Retrieve and verify
             db.refresh(paper)
-            if paper.embedding_title_abstract:
+            if paper.embedding_title_abstract is not None:
                 print(f"✓ Successfully retrieved embedding from database")
                 print(f"  - Dimension: {len(paper.embedding_title_abstract)}")
                 return True
