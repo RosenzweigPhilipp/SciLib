@@ -414,3 +414,140 @@ async def generate_paper_summary(
         "status": "processing",
         "message": "Summary generation started"
     }
+
+
+# ============================================
+# Recommendation Endpoints
+# ============================================
+
+class RecommendationResponse(BaseModel):
+    """Single recommendation response"""
+    paper_id: int
+    title: str
+    authors: str
+    abstract: Optional[str]
+    year: Optional[int]
+    journal: Optional[str]
+    doi: Optional[str]
+    score: float
+    primary_reason: str
+    strategy_scores: dict
+    has_summary: bool
+    has_embedding: bool
+
+
+class RecommendationsResponse(BaseModel):
+    """List of recommendations for a paper"""
+    paper_id: int
+    total_recommendations: int
+    from_cache: bool
+    generated_at: Optional[str] = None
+    recommendations: List[RecommendationResponse]
+
+
+@router.get("/{paper_id}/recommendations", response_model=RecommendationsResponse)
+def get_paper_recommendations(
+    paper_id: int,
+    limit: int = Query(5, ge=1, le=20, description="Maximum number of recommendations"),
+    force_refresh: bool = Query(False, description="Force regenerate recommendations"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get recommendations for a paper.
+    
+    Returns similar papers from the library based on multiple strategies:
+    - Vector similarity (semantic content)
+    - Tag similarity (shared tags)
+    - Collection similarity (same collections)
+    - Author similarity (shared authors)
+    - Year proximity (published around same time)
+    
+    Results are cached for 7 days by default.
+    """
+    # Check paper exists
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper not found"
+        )
+    
+    # Import here to avoid circular imports
+    from app.ai.services import get_recommendations
+    
+    # Get recommendations (uses cache if available)
+    try:
+        recommendations = get_recommendations(
+            db=db,
+            paper_id=paper_id,
+            limit=limit,
+            use_cache=True,
+            force_refresh=force_refresh
+        )
+        
+        # Check if from cache
+        from_cache = False
+        generated_at = None
+        if not force_refresh and paper.extraction_metadata:
+            cached = paper.extraction_metadata.get("recommendations")
+            if cached:
+                from_cache = True
+                generated_at = cached.get("generated_at")
+        
+        return RecommendationsResponse(
+            paper_id=paper_id,
+            total_recommendations=len(recommendations),
+            from_cache=from_cache,
+            generated_at=generated_at,
+            recommendations=[RecommendationResponse(**rec) for rec in recommendations]
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate recommendations: {str(e)}"
+        )
+
+
+@router.post("/{paper_id}/recommendations/refresh")
+def refresh_paper_recommendations(
+    paper_id: int,
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db)
+):
+    """
+    Force refresh recommendations for a paper.
+    
+    Regenerates recommendations even if cached results exist.
+    """
+    # Check paper exists
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper not found"
+        )
+    
+    from app.ai.services import get_recommendations
+    
+    try:
+        recommendations = get_recommendations(
+            db=db,
+            paper_id=paper_id,
+            limit=limit,
+            use_cache=False,
+            force_refresh=True
+        )
+        
+        return {
+            "paper_id": paper_id,
+            "status": "completed",
+            "total_recommendations": len(recommendations),
+            "message": f"Generated {len(recommendations)} fresh recommendations"
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh recommendations: {str(e)}"
+        )
