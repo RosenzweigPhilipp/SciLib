@@ -13,6 +13,7 @@ from .summary_service import SummaryService, generate_paper_summary
 from .vector_search_service import VectorSearchService, SearchResult, search_papers
 from .recommendation_service import RecommendationService, get_recommendations
 from .discovery_service import DiscoveryService, search_external_papers
+from .citation_service import CitationAnalysisService, add_citation_link
 
 __all__ = [
     "EmbeddingService",
@@ -27,5 +28,7 @@ __all__ = [
     "get_recommendations",
     "DiscoveryService",
     "search_external_papers",
+    "CitationAnalysisService",
+    "add_citation_link",
 ]
 

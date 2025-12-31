@@ -54,9 +54,31 @@ class Paper(Base):
     ai_key_findings = Column(JSON)  # List of key findings/bullet points
     summary_generated_at = Column(DateTime(timezone=True))
     
+    # Citation fields
+    citation_count = Column(Integer, default=0, index=True)  # Times cited by other library papers
+    reference_count = Column(Integer, default=0)  # Papers this paper cites in library
+    external_citation_count = Column(Integer, default=0)  # Total citations from external sources
+    h_index = Column(Integer, default=0, index=True)  # H-index based on library citations
+    influence_score = Column(Float, default=0.0, index=True)  # Calculated influence (0.0-1.0)
+    citations_updated_at = Column(DateTime(timezone=True))
+    
     # Relationships
     collections = relationship("Collection", secondary=paper_collections, back_populates="papers")
     tags = relationship("Tag", secondary=paper_tags, back_populates="papers")
+    
+    # Citation relationships
+    citations_made = relationship(
+        "Citation",
+        foreign_keys="Citation.citing_paper_id",
+        back_populates="citing_paper",
+        cascade="all, delete-orphan"
+    )
+    citations_received = relationship(
+        "Citation",
+        foreign_keys="Citation.cited_paper_id",
+        back_populates="cited_paper",
+        cascade="all, delete-orphan"
+    )
 
 
 class Collection(Base):
@@ -82,6 +104,20 @@ class Tag(Base):
     
     # Relationships  
     papers = relationship("Paper", secondary=paper_tags, back_populates="tags")
+
+
+class Citation(Base):
+    __tablename__ = "citations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    citing_paper_id = Column(Integer, ForeignKey("papers.id", ondelete="CASCADE"), nullable=False, index=True)
+    cited_paper_id = Column(Integer, ForeignKey("papers.id", ondelete="CASCADE"), nullable=False, index=True)
+    context = Column(Text)  # Optional: citation context from text
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    citing_paper = relationship("Paper", foreign_keys=[citing_paper_id], back_populates="citations_made")
+    cited_paper = relationship("Paper", foreign_keys=[cited_paper_id], back_populates="citations_received")
 
 
 # Compatibility aliases for association tables
