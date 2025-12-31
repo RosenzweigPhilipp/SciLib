@@ -2,8 +2,7 @@
 Direct LLM-based metadata extraction pipeline for scientific papers.
 Simplified approach without complex agent frameworks.
 """
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
+from openai import AsyncOpenAI
 from typing import Dict, List, Optional, Any
 import json
 import logging
@@ -91,13 +90,11 @@ class MetadataExtractionPipeline:
         self.use_llm = use_llm
         
         if use_llm:
-            self.llm = ChatOpenAI(
-                api_key=openai_api_key,
-                model="gpt-4o-mini",
-                temperature=0.1
-            )
+            self.llm = AsyncOpenAI(api_key=openai_api_key)
+            self.model = "gpt-4o-mini"
         else:
             self.llm = None
+            self.model = None
         
         # Initialize extraction tools
         self.pdf_extractor = PDFExtractor()
@@ -412,11 +409,10 @@ class MetadataExtractionPipeline:
         
         debug_log("  Analyzing PDF with LLM (GPT-4o-mini)...", Colors.OKBLUE)
         
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert at extracting bibliographic metadata from academic papers. 
+        system_prompt = """You are an expert at extracting bibliographic metadata from academic papers. 
 Analyze the provided PDF text and extract the following information in JSON format:
 
-{{
+{
   "title": "exact paper title",
   "authors": "full author list", 
   "abstract": "paper abstract if available",
@@ -425,24 +421,29 @@ Analyze the provided PDF text and extract the following information in JSON form
   "doi": "DOI if present",
   "keywords": "keywords if available",
   "confidence": 0.8
-}}
+}
 
 Be precise and only include information you are confident about. 
 Set confidence between 0.0 and 1.0 based on text quality and extraction certainty.
-If information is not clearly available, use null for that field."""),
-            ("human", "Extract metadata from this PDF text:\n\n{pdf_text}")
-        ])
+If information is not clearly available, use null for that field."""
         
         try:
             text_length = len(pdf_result.get("text", ""))
             debug_log(f"  Sending {min(text_length, 8000)} chars to LLM...", Colors.OKBLUE)
             
-            response = await self.llm.ainvoke(prompt.format_messages(
-                pdf_text=pdf_result.get("text", "")[:8000]  # Limit to ~8k chars
-            ))
+            pdf_text = pdf_result.get("text", "")[:8000]  # Limit to ~8k chars
+            
+            response = await self.llm.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Extract metadata from this PDF text:\n\n{pdf_text}"}
+                ],
+                temperature=0.1
+            )
             
             # Parse JSON response with robust error handling
-            content = response.content.strip()
+            content = response.choices[0].message.content.strip()
             
             debug_log(f"  LLM returned {len(content)} characters", Colors.OKBLUE)
             

@@ -14,8 +14,6 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # AI Services
-    langchain_api_key: Optional[str] = None
-    langsmith_api_key: Optional[str] = None
     exa_api_key: Optional[str] = None
     
     # Scientific APIs

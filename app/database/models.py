@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Table, Float, JSON, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 from .connection import Base
 
 
@@ -42,6 +43,10 @@ class Paper(Base):
     extraction_metadata = Column(JSON, default=dict)  # Raw extraction results
     extracted_at = Column(DateTime(timezone=True))
     manual_override = Column(Boolean, default=False)  # User can override AI extraction
+    
+    # Embedding fields for vector search
+    embedding_title_abstract = Column(Vector(1536))  # OpenAI text-embedding-3-small
+    embedding_generated_at = Column(DateTime(timezone=True))
     
     # Relationships
     collections = relationship("Collection", secondary=paper_collections, back_populates="papers")

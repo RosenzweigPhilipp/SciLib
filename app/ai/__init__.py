@@ -2,15 +2,15 @@
 AI module for SciLib - Scientific Literature Manager
 
 This module provides AI-powered metadata extraction functionality using:
-- LangChain agents for orchestrating extraction workflows
+- Direct OpenAI API integration for optional LLM validation
 - Multiple PDF extraction methods (text + OCR)  
-- Scientific APIs (CrossRef, arXiv, Semantic Scholar)
+- Scientific APIs (CrossRef, arXiv, Semantic Scholar, OpenAlex)
 - Semantic web search (Exa.ai)
 - Background processing with Celery
 - Confidence scoring and validation
 
 Main components:
-- agents/: LangChain agent pipeline orchestration
+- agents/: Metadata extraction pipeline orchestration
 - extractors/: PDF content extraction services  
 - tools/: Scientific APIs and search tools
 - tasks.py: Celery background task definitions

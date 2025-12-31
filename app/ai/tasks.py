@@ -31,7 +31,7 @@ if Celery:
     celery_app = Celery(
         "scilib_ai",
         broker=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-        backend=os.getenv("CELERY_RESULT_BACKEND", os.getenv("DATABASE_URL", "postgresql://username:password@localhost/scilib"))
+        backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
     )
     
     # Celery configuration
@@ -312,7 +312,7 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
             return True
             
     except Exception as e:
-        logger.error(f\"Failed to get database connection or update paper {paper_id}: {e}\")
+        logger.error(f"Failed to get database connection or update paper {paper_id}: {e}")
         return False
 
 
@@ -421,3 +421,136 @@ def health_check() -> Dict[str, str]:
         "timestamp": datetime.now().isoformat(),
         "worker": "scilib_ai_worker"
     }
+
+
+@celery_app.task(bind=True, name="generate_paper_embedding")
+def generate_paper_embedding_task(self, paper_id: int, force_regenerate: bool = False) -> Dict[str, Any]:
+    """
+    Celery task for generating embeddings for a paper.
+    
+    Args:
+        paper_id: Database ID of the paper
+        force_regenerate: If True, regenerate even if embedding already exists
+        
+    Returns:
+        Dict with embedding generation results
+    """
+    try:
+        # Update task status
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 0,
+                "total": 100,
+                "status": "Initializing embedding generation..."
+            }
+        )
+        
+        logger.info(f"Starting embedding generation for paper {paper_id} (task id: {getattr(self.request, 'id', None)}, force: {force_regenerate})")
+        
+        # Import here to avoid circular imports
+        from ..database import SessionLocal
+        from ..database import Paper as PaperModel
+        from .services.embedding_service import EmbeddingService
+        import asyncio
+        
+        # Get paper from database
+        with SessionLocal() as db:
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+            if not paper:
+                logger.error(f"Paper {paper_id} not found in database")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found",
+                    "failed_at": datetime.now().isoformat()
+                }
+            
+            # Check if embedding already exists
+            if paper.embedding_title_abstract is not None and not force_regenerate:
+                logger.info(f"Paper {paper_id} already has embedding, skipping")
+                return {
+                    "status": "SUCCESS",
+                    "paper_id": paper_id,
+                    "message": "Embedding already exists",
+                    "skipped": True,
+                    "completed_at": datetime.now().isoformat()
+                }
+            
+            # Extract title and abstract
+            title = paper.title
+            abstract = paper.abstract
+            
+            if not title:
+                logger.error(f"Paper {paper_id} has no title, cannot generate embedding")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper has no title",
+                    "failed_at": datetime.now().isoformat()
+                }
+        
+        # Update progress
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 30,
+                "total": 100,
+                "status": "Generating embedding..."
+            }
+        )
+        
+        # Generate embedding
+        embedding = asyncio.run(EmbeddingService.generate_paper_embedding(title, abstract))
+        
+        if embedding is None:
+            logger.error(f"Failed to generate embedding for paper {paper_id}")
+            return {
+                "status": "FAILURE",
+                "paper_id": paper_id,
+                "error": "Embedding generation failed",
+                "failed_at": datetime.now().isoformat()
+            }
+        
+        # Update progress
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 80,
+                "total": 100,
+                "status": "Saving embedding to database..."
+            }
+        )
+        
+        # Save to database
+        with SessionLocal() as db:
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+            if paper:
+                paper.embedding_title_abstract = embedding
+                paper.embedding_generated_at = datetime.now()
+                db.commit()
+                logger.info(f"Successfully saved embedding for paper {paper_id}")
+            else:
+                logger.error(f"Paper {paper_id} not found when saving embedding")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found when saving",
+                    "failed_at": datetime.now().isoformat()
+                }
+        
+        return {
+            "status": "SUCCESS",
+            "paper_id": paper_id,
+            "embedding_dimension": len(embedding),
+            "completed_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Embedding generation failed for paper {paper_id}: {str(e)}", exc_info=True)
+        return {
+            "status": "FAILURE",
+            "paper_id": paper_id,
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }
