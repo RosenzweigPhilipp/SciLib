@@ -141,22 +141,38 @@ class API {
             return API.request(`/ai/status/${taskId}`);
         },
         
-        // Summaries
+        // Summaries (in papers API)
         async generateSummary(paperId) {
-            return API.request(`/ai/summarize/${paperId}`, { method: 'POST' });
+            return API.request(`/papers/${paperId}/summarize`, { 
+                method: 'POST',
+                body: JSON.stringify({ force_regenerate: false })
+            });
         },
         
-        // Recommendations
+        async getSummary(paperId) {
+            return API.request(`/papers/${paperId}/summary`);
+        },
+        
+        // Recommendations (in papers API)
         async getRecommendations(paperId, limit = 5) {
-            return API.request(`/recommendations/${paperId}?limit=${limit}`);
+            return API.request(`/papers/${paperId}/recommendations?limit=${limit}`);
         },
         
-        // Search
+        // Search (search API)
         async semanticSearch(query, limit = 10, searchType = 'hybrid') {
-            return API.request(`/search?query=${encodeURIComponent(query)}&limit=${limit}&search_type=${searchType}`);
+            return API.request('/search', {
+                method: 'POST',
+                body: JSON.stringify({
+                    query: query,
+                    limit: limit,
+                    mode: searchType,
+                    semantic_weight: 0.7,
+                    keyword_weight: 0.3
+                })
+            });
         },
         
-        // External Discovery
+        // External Discovery (discover API)
         async discoverPapers(query, limit = 10) {
             return API.request(`/discover/search?query=${encodeURIComponent(query)}&limit=${limit}`);
         },
