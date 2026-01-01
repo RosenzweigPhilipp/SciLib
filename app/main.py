@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .api import papers, collections, tags, search, discovery, citations
+from .api import papers, collections, tags, search, discovery, citations, smart_collections
 from .ai import endpoints as ai_endpoints
 from .auth import verify_api_key
 
@@ -39,6 +39,7 @@ app.include_router(tags.router, prefix="/api", dependencies=[Depends(verify_api_
 app.include_router(search.router, dependencies=[Depends(verify_api_key)])
 app.include_router(discovery.router, dependencies=[Depends(verify_api_key)])
 app.include_router(citations.router, dependencies=[Depends(verify_api_key)])
+app.include_router(smart_collections.router, dependencies=[Depends(verify_api_key)])
 app.include_router(ai_endpoints.router, dependencies=[Depends(verify_api_key)])
 
 # Public endpoints (no auth required)

@@ -516,9 +516,6 @@ class PaperManager {
                 </div>
             ` : '';
             
-            // Generate AI summaries section
-            const summariesSection = this.generateSummariesSection(paper);
-            
             // Generate citations section
             const citationsSection = this.generateCitationsSection(paper);
             
@@ -542,14 +539,31 @@ class PaperManager {
                 
                 ${aiInfo}
                 ${citationsSection}
-                ${summariesSection}
                 
-                ${paper.abstract ? `
-                    <div class="paper-abstract">
-                        <h4>Abstract</h4>
-                        <p>${Utils.sanitizeHtml(paper.abstract)}</p>
+                <div class="content-tabs">
+                    <div class="tabs-header">
+                        <button class="tab-btn active" onclick="window.paperManager.switchTab(event, 'abstract-tab')">Abstract</button>
+                        <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'summary-long-tab')">Detailed Summary</button>
+                        <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'summary-short-tab')">Short Summary</button>
+                        <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'findings-tab')">Key Findings</button>
                     </div>
-                ` : ''}
+                    <div class="tabs-content">
+                        <div id="abstract-tab" class="tab-pane active">
+                            ${paper.abstract ? `<p>${Utils.sanitizeHtml(paper.abstract)}</p>` : '<p class="empty-message">No abstract available</p>'}
+                        </div>
+                        <div id="summary-long-tab" class="tab-pane">
+                            ${paper.ai_summary_long ? `<p>${Utils.sanitizeHtml(paper.ai_summary_long)}</p>` : '<p class="empty-message">No detailed summary available yet</p>'}
+                        </div>
+                        <div id="summary-short-tab" class="tab-pane">
+                            ${paper.ai_summary_short ? `<p>${Utils.sanitizeHtml(paper.ai_summary_short)}</p>` : '<p class="empty-message">No short summary available yet</p>'}
+                        </div>
+                        <div id="findings-tab" class="tab-pane">
+                            ${this.generateKeyFindingsContent(paper)}
+                        </div>
+                    </div>
+                </div>
+                
+                ${this.generateSummaryButton(paper)}
                 
                 ${paper.keywords ? `
                     <div class="paper-keywords">
@@ -563,6 +577,15 @@ class PaperManager {
             
             UIComponents.showModal('paper-details-modal');
             
+            // Auto-generate summaries if they don't exist
+            const hasSummaries = paper.ai_summary_short || paper.ai_summary_long || paper.ai_key_findings;
+            if (!hasSummaries) {
+                // Show loading state immediately
+                this.showSummaryLoadingState();
+                // Trigger generation automatically
+                this.generateSummary(paperId, true); // true = auto-triggered
+            }
+            
             // Load recommendations asynchronously
             this.loadRecommendations(paperId);
             
@@ -572,11 +595,63 @@ class PaperManager {
         }
     }
     
-    generateSummariesSection(paper) {
-        if (!paper.ai_summary_short && !paper.ai_summary_long && !paper.ai_key_findings) {
+    generateKeyFindingsContent(paper) {
+        if (!paper.ai_key_findings) {
+            return '<p class="empty-message">No key findings available yet</p>';
+        }
+        
+        const findings = Array.isArray(paper.ai_key_findings) ? paper.ai_key_findings : 
+                        (typeof paper.ai_key_findings === 'string' ? JSON.parse(paper.ai_key_findings) : []);
+        
+        if (findings.length === 0) {
+            return '<p class="empty-message">No key findings available yet</p>';
+        }
+        
+        return `
+            <ul class="findings-list">
+                ${findings.map(f => `<li>${Utils.sanitizeHtml(f)}</li>`).join('')}
+            </ul>
+        `;
+    }
+    
+    showSummaryLoadingState() {
+        // Update all summary tabs to show loading state
+        const longTab = document.getElementById('summary-long-tab');
+        const shortTab = document.getElementById('summary-short-tab');
+        const findingsTab = document.getElementById('findings-tab');
+        
+        const loadingHTML = `
+            <div class="summary-loading">
+                <div class="loading-spinner">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                </div>
+                <p>Generating AI summary...</p>
+                <p class="loading-subtext">This may take 30-60 seconds</p>
+            </div>
+        `;
+        
+        if (longTab) longTab.innerHTML = loadingHTML;
+        if (shortTab) shortTab.innerHTML = loadingHTML;
+        if (findingsTab) findingsTab.innerHTML = loadingHTML;
+        
+        // Update the generate button area
+        const summaryAction = document.querySelector('.summary-action');
+        if (summaryAction) {
+            summaryAction.innerHTML = `
+                <div class="summary-status generating">
+                    <i class="fas fa-magic fa-spin"></i>
+                    <span>Generating summaries...</span>
+                </div>
+            `;
+        }
+    }
+    
+    generateSummaryButton(paper) {
+        const hasSummaries = paper.ai_summary_short || paper.ai_summary_long || paper.ai_key_findings;
+        
+        if (!hasSummaries) {
             return `
-                <div class="ai-summaries-section">
-                    <h4><i class="fas fa-brain"></i> AI Summary</h4>
+                <div class="summary-action">
                     <button class="btn btn-primary" onclick="window.paperManager.generateSummary(${paper.id})">
                         <i class="fas fa-magic"></i> Generate AI Summary
                     </button>
@@ -584,52 +659,14 @@ class PaperManager {
             `;
         }
         
-        let summariesHTML = '<div class="ai-summaries-section"><h4><i class="fas fa-brain"></i> AI Summary</h4>';
-        
-        if (paper.ai_summary_short) {
-            summariesHTML += `
-                <div class="summary-box">
-                    <h5><i class="fas fa-compress-alt"></i> Short Summary</h5>
-                    <p>${Utils.sanitizeHtml(paper.ai_summary_short)}</p>
-                </div>
-            `;
-        }
-        
-        if (paper.ai_key_findings) {
-            const findings = Array.isArray(paper.ai_key_findings) ? paper.ai_key_findings : 
-                            (typeof paper.ai_key_findings === 'string' ? JSON.parse(paper.ai_key_findings) : []);
-            if (findings.length > 0) {
-                summariesHTML += `
-                    <div class="summary-box">
-                        <h5><i class="fas fa-lightbulb"></i> Key Findings</h5>
-                        <ul class="findings-list">
-                            ${findings.map(f => `<li>${Utils.sanitizeHtml(f)}</li>`).join('')}
-                        </ul>
-                    </div>
-                `;
-            }
-        }
-        
-        if (paper.ai_summary_long) {
-            summariesHTML += `
-                <div class="summary-box">
-                    <h5><i class="fas fa-align-left"></i> Detailed Summary</h5>
-                    <p>${Utils.sanitizeHtml(paper.ai_summary_long)}</p>
-                </div>
-            `;
-        }
-        
-        if (paper.summary_generated_at) {
-            summariesHTML += `<p class="summary-meta"><em>Generated on ${Utils.formatDate(paper.summary_generated_at)}</em></p>`;
-        }
-        
-        summariesHTML += `
-            <button class="btn btn-secondary btn-sm" onclick="window.paperManager.generateSummary(${paper.id})">
-                <i class="fas fa-sync"></i> Regenerate Summary
-            </button>
-        </div>`;
-        
-        return summariesHTML;
+        return `
+            <div class="summary-action">
+                ${paper.summary_generated_at ? `<p class="summary-meta"><em>Generated on ${Utils.formatDate(paper.summary_generated_at)}</em></p>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="window.paperManager.generateSummary(${paper.id})">
+                    <i class="fas fa-sync"></i> Regenerate Summary
+                </button>
+            </div>
+        `;
     }
     
     generateCitationsSection(paper) {
@@ -736,17 +773,70 @@ class PaperManager {
         }
     }
     
-    async generateSummary(paperId) {
+    async generateSummary(paperId, autoTriggered = false) {
         try {
-            UIComponents.showNotification('Generating AI summary...', 'info');
-            await API.ai.generateSummary(paperId);
-            UIComponents.showNotification('Summary generated successfully!', 'success');
-            // Reload paper details
-            await this.showPaperDetails(paperId);
+            if (!autoTriggered) {
+                UIComponents.showNotification('Generating AI summary...', 'info');
+            }
+            const response = await API.ai.generateSummary(paperId);
+            const taskId = response.task_id;
+            
+            // Poll for task completion
+            await this.pollTaskStatus(taskId, paperId, autoTriggered);
         } catch (error) {
             console.error('Error generating summary:', error);
             UIComponents.showNotification('Failed to generate summary', 'error');
         }
+    }
+
+    async pollTaskStatus(taskId, paperId, autoTriggered = false, maxAttempts = 60) {
+        let attempts = 0;
+        
+        const poll = async () => {
+            try {
+                attempts++;
+                const status = await API.ai.getTaskStatus(taskId);
+                
+                if (status.status === 'completed') {
+                    if (!autoTriggered) {
+                        UIComponents.showNotification('Summary generated successfully!', 'success');
+                    }
+                    // Reload paper details to show new summary
+                    await this.showPaperDetails(paperId);
+                    return;
+                } else if (status.status === 'failed' || status.status === 'error') {
+                    UIComponents.showNotification(`Summary generation failed: ${status.error || 'Unknown error'}`, 'error');
+                    return;
+                } else if (attempts >= maxAttempts) {
+                    UIComponents.showNotification('Summary generation timed out. Please refresh the page later.', 'warning');
+                    return;
+                }
+                
+                // Update progress message in the tabs if available
+                if (status.message && autoTriggered) {
+                    const summaryAction = document.querySelector('.summary-status');
+                    if (summaryAction) {
+                        const messageText = summaryAction.querySelector('span');
+                        if (messageText) {
+                            messageText.textContent = status.message;
+                        }
+                    }
+                }
+                
+                // Poll again after 2 seconds
+                setTimeout(poll, 2000);
+            } catch (error) {
+                console.error('Error polling task status:', error);
+                if (attempts < maxAttempts) {
+                    setTimeout(poll, 2000);
+                } else {
+                    UIComponents.showNotification('Failed to check summary status', 'error');
+                }
+            }
+        };
+        
+        // Start polling
+        poll();
     }
     
     async fetchExternalCitations(paperId) {
@@ -783,6 +873,16 @@ class PaperManager {
             console.error('Error loading citations:', error);
             UIComponents.showNotification('Failed to load citations', 'error');
         }
+    }
+
+    switchTab(event, tabId) {
+        // Remove active class from all tabs and panes
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+        
+        // Add active class to clicked tab and corresponding pane
+        event.currentTarget.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
     }
 
     generateAIExtractionInfo(paper) {

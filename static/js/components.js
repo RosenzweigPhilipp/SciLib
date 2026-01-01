@@ -39,6 +39,19 @@ class UIComponents {
         // Generate AI extraction status badge
         const aiStatus = UIComponents.getAIStatusBadge(paper);
         
+        // Generate collection badges
+        let collectionBadges = '';
+        if (paper.collections && paper.collections.length > 0) {
+            collectionBadges = '<div class="paper-collections">' +
+                paper.collections.slice(0, 3).map(c => 
+                    `<span class="collection-badge${c.is_smart ? ' smart-collection' : ''}" title="${Utils.sanitizeHtml(c.name)}">
+                        ${c.is_smart ? '<i class="fas fa-brain"></i> ' : ''}${Utils.sanitizeHtml(c.name)}
+                    </span>`
+                ).join('') +
+                (paper.collections.length > 3 ? `<span class="collection-badge more">+${paper.collections.length - 3} more</span>` : '') +
+                '</div>';
+        }
+        
         card.innerHTML = `
             <div class="paper-header-row">
                 <div class="paper-title" onclick="window.paperManager && window.paperManager.showPaperDetails(${paper.id})">
@@ -47,6 +60,7 @@ class UIComponents {
                 ${aiStatus}
             </div>
             <div class="paper-authors">${Utils.sanitizeHtml(paper.authors)}</div>
+            ${collectionBadges}
             ${paper.abstract ? `<div class="paper-abstract-preview">${Utils.truncateText(paper.abstract)}</div>` : ''}
             <div class="paper-meta">
                 <div>

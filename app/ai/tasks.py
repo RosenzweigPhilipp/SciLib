@@ -703,3 +703,180 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
             "error": str(e),
             "failed_at": datetime.now().isoformat()
         }
+
+@celery_app.task(bind=True, name="classify_paper_smart_collections")
+def classify_paper_smart_collections_task(self, paper_id: int) -> Dict[str, Any]:
+    """
+    Celery task for classifying a single paper into smart collections.
+    
+    Args:
+        paper_id: Database ID of the paper
+        
+    Returns:
+        Dict with classification results
+    """
+    try:
+        self.update_state(
+            state="PROGRESS",
+            meta={"current": 0, "total": 100, "status": "Analyzing paper..."}
+        )
+        
+        logger.info(f"Starting smart classification for paper {paper_id}")
+        
+        from ..database import SessionLocal
+        from ..database.models import Paper, Collection, Settings
+        from .services.smart_collection_service import SmartCollectionService
+        
+        db = SessionLocal()
+        try:
+            # Check if smart collections is enabled
+            enabled = Settings.get(db, "smart_collections_enabled", False)
+            if not enabled:
+                return {
+                    "status": "SKIPPED",
+                    "paper_id": paper_id,
+                    "message": "Smart collections is disabled"
+                }
+            
+            # Get paper
+            paper = db.query(Paper).filter(Paper.id == paper_id).first()
+            if not paper:
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found"
+                }
+            
+            # Classify paper
+            self.update_state(
+                state="PROGRESS",
+                meta={"current": 30, "total": 100, "status": "Classifying with AI..."}
+            )
+            
+            service = SmartCollectionService(os.getenv("OPENAI_API_KEY"))
+            fields = service.classify_paper(paper.title, paper.abstract)
+            
+            if not fields:
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "No fields identified"
+                }
+            
+            # Create/get collections and add paper
+            self.update_state(
+                state="PROGRESS",
+                meta={"current": 70, "total": 100, "status": "Adding to collections..."}
+            )
+            
+            added_collections = []
+            for field_name in fields:
+                collection = db.query(Collection).filter(
+                    Collection.name == field_name,
+                    Collection.is_smart == True
+                ).first()
+                
+                if not collection:
+                    collection = Collection(
+                        name=field_name,
+                        description=f"Auto-generated collection for {field_name} research",
+                        is_smart=True
+                    )
+                    db.add(collection)
+                    db.flush()
+                
+                if collection not in paper.collections:
+                    paper.collections.append(collection)
+                    added_collections.append(field_name)
+            
+            db.commit()
+            
+            logger.info(f"Paper {paper_id} classified into: {fields}")
+            
+            return {
+                "status": "SUCCESS",
+                "paper_id": paper_id,
+                "fields": fields,
+                "added_collections": added_collections,
+                "completed_at": datetime.now().isoformat()
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Smart classification failed for paper {paper_id}: {e}")
+        return {
+            "status": "FAILURE",
+            "paper_id": paper_id,
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }
+
+
+@celery_app.task(bind=True, name="classify_all_papers_smart_collections")
+def classify_all_papers_smart_collections_task(self) -> Dict[str, Any]:
+    """
+    Celery task for classifying all papers in the database.
+    
+    Returns:
+        Dict with classification results for all papers
+    """
+    try:
+        logger.info("Starting bulk smart classification")
+        
+        from ..database import SessionLocal
+        from ..database.models import Paper, Settings
+        
+        db = SessionLocal()
+        try:
+            # Check if enabled
+            enabled = Settings.get(db, "smart_collections_enabled", False)
+            if not enabled:
+                return {
+                    "status": "SKIPPED",
+                    "message": "Smart collections is disabled"
+                }
+            
+            # Get all papers
+            papers = db.query(Paper).all()
+            total = len(papers)
+            
+            self.update_state(
+                state="PROGRESS",
+                meta={"current": 0, "total": total, "status": f"Processing {total} papers..."}
+            )
+            
+            # Classify each paper
+            results = []
+            for i, paper in enumerate(papers):
+                result = classify_paper_smart_collections_task.apply(args=[paper.id])
+                results.append(result.get())
+                
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"current": i + 1, "total": total, "status": f"Processed {i + 1}/{total} papers"}
+                )
+            
+            # Count successes
+            successes = sum(1 for r in results if r.get("status") == "SUCCESS")
+            failures = sum(1 for r in results if r.get("status") == "FAILURE")
+            
+            return {
+                "status": "SUCCESS",
+                "total_papers": total,
+                "successes": successes,
+                "failures": failures,
+                "completed_at": datetime.now().isoformat()
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Bulk classification failed: {e}")
+        return {
+            "status": "FAILURE",
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }

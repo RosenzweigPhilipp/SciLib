@@ -91,6 +91,7 @@ logs/
 docs/
 
 minimals/
+minimals/*
 
 tests/
 
