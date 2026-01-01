@@ -4,16 +4,23 @@ A modern web application for managing and organizing scientific literature with 
 
 ## 🚀 Features
 
-- **Paper Management**: Upload, view, edit, and delete PDF papers
+### Core Features
+- **Paper Management**: Upload, view, edit, and delete PDF papers with AI metadata extraction
+- **Smart Collections**: AI-powered automatic paper classification into research fields
+- **Manual Collections & Tags**: Organize papers into custom collections and tag them
+- **Advanced Search**: Semantic search using vector embeddings + traditional keyword search
+- **Similar Papers**: Find related papers in your library and discover external papers
+- **Citation Analysis**: Track citation networks and calculate influence metrics
 - **Secure Authentication**: Session-based authentication system (no hardcoded API keys)
-- **Collections & Tags**: Organize papers into collections and tag them
-- **Search & Filter**: Search papers by title, authors, or content
-- **Dashboard**: Overview of your literature collection with statistics
-- **Responsive UI**: Modern, clean interface that works on desktop and mobile
-
-## 🛠️ Technology Stack
-
-- **Backend**: FastAPI (Python)
+- **Background Processing**: Celery-powered asynchronous tasks for metadata extraction
+- **Responsive UI**: Modern, clean interface with badge-style collections
+pgvector extension for vector search
+- **Task Queue**: Celery + Redis for background processing
+- **AI/ML**: OpenAI GPT-4o-mini for classification, text-embedding-3-small for vectors
+- **Scientific APIs**: CrossRef, arXiv, Semantic Scholar, OpenAlex
+- **Frontend**: Vanilla JavaScript with modular architecture
+- **Authentication**: Session-based with X-API-Key header
+- **PDF Processing**: PyMuPDF, pdfplumber, Tesseract OCR
 - **Database**: PostgreSQL with SQLAlchemy ORM
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Authentication**: JWT-like session tokens
@@ -21,8 +28,10 @@ A modern web application for managing and organizing scientific literature with 
 
 ## ⚡ Quick Start
 
-### Prerequisites
-
+### Prerequi with pgvector extension
+- Redis server
+- Git
+- Tesseract OCR (optional, for scanned PDFs)
 - Python 3.8+
 - PostgreSQL
 - Git
@@ -52,22 +61,75 @@ A modern web application for managing and organizing scientific literature with 
    # Edit .env with your database credentials and API key
    ```
 
-5. **Set up database**
-   ```bash
-   # Create PostgreSQL database
-   createdb scilib_db
+5. **Enable pgvector extension
+   psql scilib_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
    
    # The app will auto-create tables on first run
    ```
 
-6. **Run the application**
+6. **Start Redis**
    ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   redis-server
    ```
 
-7. **Access the application**
-   - Open http://localhost:8000
-   - Enter your API key from the .env file to login
+7. **Run the application**
+   
+   **Option A: Use the convenience script (recommended)**
+   ```bash
+   ./start_scilib.sh          # Production mode
+   ./start_scilib.sh --dev    # Development mode with auto-reload
+   ```
+   
+   **Option B: Manual startup (3 terminals)**
+   ```bash
+   # Terminal 1: Redis
+   redis-server
+   
+   # Termi/                    # AI integration
+│   │   ├── agents/           # Metadata extraction pipeline
+│   │   ├── extractors/       # PDF text extraction
+│   │   ├── services/         # Smart collection service
+│   │   ├── tools/            # Scientific API integrations
+│   │   ├── endpoints.py      # AI endpoints
+│   │   └── tasks.py          # Celery background tasks
+│   ├── api/                   # REST API endpoints
+│   │   ├── papers.py         # Paper CRUD
+│   │   ├── collections.py    # Collection management
+│   │   ├── tags.py           # Tag management
+│   │   └── smart_collections.py  # AI collection endpoints
+│   ├── database/              # Database layer
+│   │   ├── models.py         # SQLAlchemy models
+│   │   ├── connection.py     # DB connection
+│   │   └── init_db.py        # Initialization
+│   ├── auth.py               # Authentication
+│   ├── config.py             # Configuration
+│   ├── main.py               # FastAPI app
+│   └── celery_worker.py      # Celery worker entry point
+├── static/
+│   ├── css/
+│   │   ├── main.css          # Main styles
+│   │   └── components.css    # Component styles
+│   ├── js/
+│   │   ├── main.js           # Application logic
+│   │   ├── components.js     # UI components
+│   │   └── api.js            # API client
+
+# OpenAI (REQUIRED for AI features)
+OPENAI_API_KEY=sk-...
+
+# Celery & Redis
+REDIS_URL=redis://localhost:6379
+CELERY_BROKER_URL=redis://localhost:6379
+CELERY_RESULT_BACKEND=redis://localhost:6379
+
+# Optional API Keys (for enhanced features)
+EXA_API_KEY=...                      # Enhanced web search
+CROSSREF_EMAIL=your@email.com        # Higher CrossRef rate limits
+
+# Server
+HOST=127.0.0.1
+PORT=8000
+DEBUG=Falser your API key from the .env file to login
 
 ## 🔐 Security
 
@@ -118,33 +180,53 @@ PORT=8000
 # Upload settings
 UPLOAD_DIR=./uploads
 MAX_FILE_SIZE=50000000
-```
+```# Branch 7: Smart Collections ✅
+- ✅ AI-powered paper classification into research fields
+- ✅ GPT-4o-mini classification with confidence scoring
+- ✅ Automatic classification on paper upload
+- ✅ Manual re-classification and bulk operations
+- ✅ Badge-style UI with purple gradient for smart collections
+- ✅ Toggle smart collections on/off via settings
 
-## 🚧 Development Roadmap
+### Phase 3: Literature Intelligence 📋 PLANNED
 
-**Project Phase**: AI Integration Complete ✅
-
-### Phase 1: Core Infrastructure ✅ COMPLETE
+#### Branch 8: Literature Review Generator 📋 FUTURE
+- 📋 Automated literature review generation
+- 📋 Citation-aware summaries
+- 📋 Research gap identification
+- 📋Phase 1: Core Infrastructure ✅ COMPLETE
 - ✅ Backend API with FastAPI
 - ✅ PostgreSQL database with SQLAlchemy ORM
 - ✅ File upload and PDF storage system
-- ✅ Frontend interface with CRUD operations
-- ✅ Session-based authentication with X-API-Key
-- ✅ Paper, collection, and tag management
+- ✅ Frontend interface with CRUD operations directly (free, no LLM)
+- **Multi-API Search**: CrossRef, arXiv, Semantic Scholar, OpenAlex with fallback chain
+- **LLM Validation**: Optional GPT-4o-mini for conflict resolution (disabled by default)
+- **Confidence Scoring**: 0.0-1.0 confidence with detailed source tracking
+- **Background Processing**: Celery tasks for non-blocking extraction
+- **OCR Fallback**: Tesseract OCR for scanned PDFs
 
-### Phase 2: AI Integration ✅ COMPLETE
+### Smart Collections
+- **AI Classification**: GPT-4o-mini automatically classifies papers into 1-3 research fields
+- **Field Descriptions**: Each collection includes a detailed field description
+- **Automatic Workflow**: Classification triggers after successful metadata extraction
+- **Manual Control**: Re-classify individual papers or entire library
+- **Badge UI**: Visual distinction with purple gradient for smart collections vs blue for manual
+- **Toggle Feature**: Enable/disable smart collections via settings
 
-#### Branch 1: Vector Database Setup ✅
-- ✅ PostgreSQL pgvector extension
-- ✅ Vector embedding storage
-- ✅ Similarity search infrastructure
+### Semantic Search & Discovery
+- **Embedding Generation**: OpenAI text-embedding-3-small (1536 dimensions)
+- **Vector Search**: pgvector with cosine similarity for semantic matching
+- **Hybrid Ranking**: Combines semantic similarity with keyword relevance
+- **External Discovery**: Search 4 scientific databases simultaneously
+- **Similar Papers**: Find related papers in your library with confidence scores
 
-#### Branch 2: Paper Summarization ✅
-- ✅ AI-powered paper summaries (short/long/key findings)
-- ✅ OpenAI GPT-4o-mini integration
-- ✅ Background processing with Celery
-- ✅ PDF text extraction pipeline
-
+### Citation Intelligence
+- **Bidirectional Tracking**: Papers cited and citing relationships
+- **Influence Metrics**: 4-factor composite score (citations, velocity, h-index, centrality)
+- **Network Analysis**: Cluster detection using connected components
+- **External Integration**: Semantic Scholar API for citation counts
+- **Auto-Updates**: PostgreSQL triggers for real-time count maintenance
+- **Query Interface**: Find most influential/cited papers
 #### Branch 3: Vector Search ✅
 - ✅ Semantic search using OpenAI embeddings
 - ✅ Hybrid search (semantic + keyword)
