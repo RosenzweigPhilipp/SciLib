@@ -17,6 +17,26 @@ except ImportError:
 router = APIRouter(prefix="/papers", tags=["papers"])
 
 
+# Nested schemas for relationships
+class CollectionBase(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    is_smart: Optional[bool] = False
+    
+    class Config:
+        from_attributes = True
+
+
+class TagBase(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class Paper(BaseModel):
     id: int
     title: str
@@ -42,6 +62,10 @@ class Paper(BaseModel):
     ai_summary_long: Optional[str] = None
     ai_key_findings: Optional[List[str]] = None
     summary_generated_at: Optional[datetime] = None
+    
+    # Relationships
+    collections: List[CollectionBase] = []
+    tags: List[TagBase] = []
     
     class Config:
         from_attributes = True
@@ -144,7 +168,11 @@ async def list_papers(
     db: Session = Depends(get_db)
 ):
     """List papers with pagination and optional search"""
-    query = db.query(PaperModel)
+    from sqlalchemy.orm import joinedload
+    query = db.query(PaperModel).options(
+        joinedload(PaperModel.collections),
+        joinedload(PaperModel.tags)
+    )
     
     if search:
         query = query.filter(
@@ -160,7 +188,11 @@ async def list_papers(
 @router.get("/{paper_id}", response_model=Paper)
 async def get_paper(paper_id: int, db: Session = Depends(get_db)):
     """Get a specific paper by ID"""
-    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    from sqlalchemy.orm import joinedload
+    paper = db.query(PaperModel).options(
+        joinedload(PaperModel.collections),
+        joinedload(PaperModel.tags)
+    ).filter(PaperModel.id == paper_id).first()
     if not paper:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -192,7 +224,15 @@ async def update_paper(paper_id: int, paper_update: PaperUpdate, db: Session = D
 async def clear_all_papers(db: Session = Depends(get_db)):
     """Delete all papers and uploaded files (administrative action)."""
     try:
+        from ..database.models import paper_collections, paper_tags
+        
+        # Delete association tables first (foreign key constraints)
+        db.execute(paper_collections.delete())
+        db.execute(paper_tags.delete())
+        
+        # Get all papers
         papers = db.query(PaperModel).all()
+        
         # Delete files from disk
         for p in papers:
             try:
@@ -202,7 +242,7 @@ async def clear_all_papers(db: Session = Depends(get_db)):
                 # ignore file removal errors
                 pass
 
-        # Delete all rows
+        # Delete all papers
         db.query(PaperModel).delete()
         db.commit()
         return

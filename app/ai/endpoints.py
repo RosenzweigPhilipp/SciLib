@@ -71,21 +71,56 @@ async def get_task_status(
     _: str = Depends(verify_api_key)
 ):
     """Get extraction task status."""
+    from ..ai.tasks import celery_app
+    from celery.result import AsyncResult
     
-    # Mock response for now
-    return {
-        "task_id": task_id,
-        "status": "completed",
-        "progress": 100,
-        "result": {
-            "confidence": 0.85,
-            "metadata": {
-                "title": "Mock Paper Title",
-                "authors": "Mock Author",
-                "year": "2024"
+    try:
+        result = AsyncResult(task_id, app=celery_app)
+        
+        if result.state == 'PENDING':
+            response = {
+                "task_id": task_id,
+                "status": "pending",
+                "progress": 0,
+                "message": "Task is waiting to start"
             }
+        elif result.state == 'PROGRESS':
+            response = {
+                "task_id": task_id,
+                "status": "processing",
+                "progress": result.info.get('current', 0) if result.info else 0,
+                "message": result.info.get('status', 'Processing...') if result.info else 'Processing...'
+            }
+        elif result.state == 'SUCCESS':
+            response = {
+                "task_id": task_id,
+                "status": "completed",
+                "progress": 100,
+                "result": result.result
+            }
+        elif result.state == 'FAILURE':
+            response = {
+                "task_id": task_id,
+                "status": "failed",
+                "progress": 0,
+                "error": str(result.info) if result.info else "Unknown error"
+            }
+        else:
+            response = {
+                "task_id": task_id,
+                "status": result.state.lower(),
+                "progress": 0
+            }
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error checking task status: {e}")
+        return {
+            "task_id": task_id,
+            "status": "error",
+            "error": str(e)
         }
-    }
+
 
 
 @router.get("/paper/{paper_id}/extraction") 

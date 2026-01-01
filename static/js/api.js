@@ -152,6 +152,10 @@ class API {
         async getSummary(paperId) {
             return API.request(`/papers/${paperId}/summary`);
         },
+
+        async getTaskStatus(taskId) {
+            return API.request(`/ai/status/${taskId}`);
+        },
         
         // Recommendations (in papers API)
         async getRecommendations(paperId, limit = 5) {
@@ -329,3 +333,38 @@ const Utils = {
         return div.innerHTML;
     }
 };
+
+// Smart Collections API
+const SmartCollectionsAPI = {
+    async toggle(enabled) {
+        return API.request('/collections/smart/toggle', {
+            method: 'POST',
+            body: JSON.stringify({ enabled })
+        });
+    },
+
+    async getStatus() {
+        return API.request('/collections/smart/status');
+    },
+
+    async classifyAll() {
+        return API.request('/collections/smart/classify-all', {
+            method: 'POST'
+        });
+    },
+
+    async classifyPaper(paperId) {
+        return API.request(`/collections/smart/classify/${paperId}`, {
+            method: 'POST'
+        });
+    },
+
+    async clear() {
+        return API.request('/collections/smart/clear', {
+            method: 'DELETE'
+        });
+    }
+};
+
+// Add to API object
+API.smartCollections = SmartCollectionsAPI;

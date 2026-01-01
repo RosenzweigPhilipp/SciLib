@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -8,12 +8,26 @@ from ..database import get_db, Collection as CollectionModel
 router = APIRouter(prefix="/collections", tags=["collections"])
 
 
+# Nested schema for papers in collections
+class PaperInCollection(BaseModel):
+    id: int
+    title: str
+    authors: str
+    year: Optional[int] = None
+    journal: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class Collection(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    is_smart: Optional[bool] = False
     created_at: datetime
     updated_at: datetime
+    papers: List[PaperInCollection] = []
     
     class Config:
         from_attributes = True
@@ -32,7 +46,10 @@ class CollectionUpdate(BaseModel):
 @router.get("/", response_model=List[Collection])
 async def list_collections(db: Session = Depends(get_db)):
     """List all collections"""
-    return db.query(CollectionModel).all()
+    collections = db.query(CollectionModel).options(
+        joinedload(CollectionModel.papers)
+    ).all()
+    return collections
 
 
 @router.post("/", response_model=Collection, status_code=status.HTTP_201_CREATED)
@@ -62,7 +79,9 @@ async def create_collection(collection: CollectionCreate, db: Session = Depends(
 @router.get("/{collection_id}", response_model=Collection)
 async def get_collection(collection_id: int, db: Session = Depends(get_db)):
     """Get a specific collection by ID"""
-    collection = db.query(CollectionModel).filter(CollectionModel.id == collection_id).first()
+    collection = db.query(CollectionModel).options(
+        joinedload(CollectionModel.papers)
+    ).filter(CollectionModel.id == collection_id).first()
     if not collection:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

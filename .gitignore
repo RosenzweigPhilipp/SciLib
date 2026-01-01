@@ -89,8 +89,10 @@ logs/*.txt
 logs/
 
 docs/
+docs/*
 
 minimals/
+minimals/*
 
 tests/
 
