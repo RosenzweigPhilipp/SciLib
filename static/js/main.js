@@ -250,6 +250,7 @@ class DashboardManager {
         await this.loadStats();
         await this.loadRecentPapers();
         await this.loadSmartCollectionsStatus();
+        await this.loadAutoSummariesStatus();
     }
 
     setupSmartCollections() {
@@ -257,6 +258,13 @@ class DashboardManager {
         if (toggle) {
             toggle.addEventListener('change', async (e) => {
                 await this.toggleSmartCollections(e.target.checked);
+            });
+        }
+
+        const summariesToggle = document.getElementById('auto-summaries-toggle');
+        if (summariesToggle) {
+            summariesToggle.addEventListener('change', async (e) => {
+                await this.toggleAutoSummaries(e.target.checked);
             });
         }
     }
@@ -317,6 +325,27 @@ class DashboardManager {
         }
     }
 
+    async loadAutoSummariesStatus() {
+        try {
+            const panel = document.getElementById('auto-summaries-panel');
+            if (panel) {
+                panel.style.display = 'block';
+            }
+
+            const status = await API.settings.getSummariesStatus();
+            
+            // Update toggle
+            const toggle = document.getElementById('auto-summaries-toggle');
+            const label = document.getElementById('summaries-toggle-label');
+            if (toggle && label) {
+                toggle.checked = status.enabled;
+                label.textContent = status.enabled ? 'Enabled' : 'Disabled';
+            }
+        } catch (error) {
+            console.error('Error loading auto-summaries status:', error);
+        }
+    }
+
     async toggleSmartCollections(enabled) {
         try {
             const label = document.getElementById('smart-toggle-label');
@@ -345,6 +374,33 @@ class DashboardManager {
             
             // Revert toggle
             const toggle = document.getElementById('smart-collections-toggle');
+            if (toggle) {
+                toggle.checked = !enabled;
+            }
+        }
+    }
+
+    async toggleAutoSummaries(enabled) {
+        try {
+            const label = document.getElementById('summaries-toggle-label');
+            if (label) {
+                label.textContent = enabled ? 'Enabling...' : 'Disabling...';
+            }
+
+            await API.settings.toggleSummaries(enabled);
+            
+            UIComponents.showNotification(`Auto-summaries ${enabled ? 'enabled' : 'disabled'}`, 'success');
+
+            // Update label
+            if (label) {
+                label.textContent = enabled ? 'Enabled' : 'Disabled';
+            }
+        } catch (error) {
+            console.error('Error toggling auto-summaries:', error);
+            UIComponents.showNotification('Failed to toggle auto-summaries', 'error');
+            
+            // Revert toggle
+            const toggle = document.getElementById('auto-summaries-toggle');
             if (toggle) {
                 toggle.checked = !enabled;
             }
@@ -678,15 +734,6 @@ class PaperManager {
             `;
             
             UIComponents.showModal('paper-details-modal');
-            
-            // Auto-generate summaries if they don't exist
-            const hasSummaries = paper.ai_summary_short || paper.ai_summary_long || paper.ai_key_findings;
-            if (!hasSummaries) {
-                // Show loading state immediately
-                this.showSummaryLoadingState();
-                // Trigger generation automatically
-                this.generateSummary(paperId, true); // true = auto-triggered
-            }
             
             // Load recommendations asynchronously
             this.loadRecommendations(paperId);

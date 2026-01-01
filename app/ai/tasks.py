@@ -175,7 +175,7 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
             logger.error(f"Failed to update database for paper {paper_id}")
             result["errors"].append("Failed to update database")
         
-        # Trigger smart collection classification if extraction was successful
+        # Trigger smart collection classification and summary generation if extraction was successful
         if update_success and result["extraction_status"] == "completed":
             try:
                 from ..database.models import Settings
@@ -183,14 +183,23 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
                 
                 db = SessionLocal()
                 try:
-                    enabled = Settings.get(db, "smart_collections_enabled", False)
-                    if enabled:
+                    # Trigger smart collection classification if enabled
+                    smart_collections_enabled = Settings.get(db, "smart_collections_enabled", False)
+                    if smart_collections_enabled:
                         logger.info(f"Triggering smart collection classification for paper {paper_id}")
                         classify_paper_smart_collections_task.delay(paper_id)
+                    
+                    # Trigger summary generation if enabled
+                    summaries_auto_enabled = Settings.get(db, "summaries_auto_enabled", False)
+                    if summaries_auto_enabled:
+                        logger.info(f"Triggering automatic summary generation for paper {paper_id}")
+                        generate_paper_summary_task.delay(paper_id)
+                    else:
+                        logger.info(f"Skipping automatic summary generation for paper {paper_id} (disabled in settings)")
                 finally:
                     db.close()
-            except Exception as classification_error:
-                logger.error(f"Failed to trigger smart collection classification: {classification_error}")
+            except Exception as background_error:
+                logger.error(f"Failed to trigger background tasks: {background_error}")
         
         # Final status
         final_status = "SUCCESS" if result["extraction_status"] == "completed" else "FAILURE"

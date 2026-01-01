@@ -366,5 +366,20 @@ const SmartCollectionsAPI = {
     }
 };
 
+// Settings API
+const SettingsAPI = {
+    async getSummariesStatus() {
+        return API.request('/settings/summaries/status');
+    },
+
+    async toggleSummaries(enabled) {
+        return API.request('/settings/summaries/toggle', {
+            method: 'POST',
+            body: JSON.stringify({ enabled })
+        });
+    }
+};
+
 // Add to API object
 API.smartCollections = SmartCollectionsAPI;
+API.settings = SettingsAPI;
