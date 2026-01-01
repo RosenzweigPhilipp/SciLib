@@ -53,6 +53,12 @@ class Paper(Base):
     ai_summary_long = Column(Text)  # ~200 word detailed summary
     ai_key_findings = Column(JSON)  # List of key findings/bullet points
     summary_generated_at = Column(DateTime(timezone=True))
+    summary_generation_method = Column(String(50))  # 'llm_knowledge', 'full_extraction', 'manual'
+    
+    # LLM Knowledge Check fields
+    llm_knowledge_check = Column(Boolean)  # True if LLM knows paper, False if not, None if not checked
+    llm_knowledge_confidence = Column(Float)  # 0.0-1.0 confidence score
+    llm_knowledge_checked_at = Column(DateTime(timezone=True))
     
     # Citation fields
     citation_count = Column(Integer, default=0, index=True)  # Times cited by other library papers

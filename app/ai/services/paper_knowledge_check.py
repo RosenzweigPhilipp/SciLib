@@ -124,16 +124,29 @@ Format your response as JSON with keys: "short_summary", "long_summary", "key_fi
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=800
+                max_tokens=800,
+                response_format={"type": "json_object"}
             )
             
             import json
-            result = json.loads(response.choices[0].message.content.strip())
+            content = response.choices[0].message.content.strip()
+            result = json.loads(content)
+            
+            # Ensure all fields exist
+            short = result.get("short_summary", "") or result.get("short", "")
+            long = result.get("long_summary", "") or result.get("detailed_summary", "")
+            findings = result.get("key_findings", [])
+            
+            # Convert findings to list if it's a string or dict
+            if isinstance(findings, str):
+                findings = [findings]
+            elif isinstance(findings, dict):
+                findings = list(findings.values())
             
             return {
-                "short_summary": result.get("short_summary", ""),
-                "long_summary": result.get("long_summary", ""),
-                "key_findings": result.get("key_findings", [])
+                "short_summary": short,
+                "long_summary": long,
+                "key_findings": findings if isinstance(findings, list) else []
             }
             
         except Exception as e:

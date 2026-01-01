@@ -568,9 +568,17 @@
 }
 
 .extraction-status-banner.processing {
+    display: flex;
     background: #cce5ff;
     color: #004085;
     border: 1px solid #b3d9ff;
+}
+
+.extraction-status-banner.generating {
+    display: flex;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
 }
 
 .extraction-status-banner.completed {

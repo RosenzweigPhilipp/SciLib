@@ -100,7 +100,7 @@ class UIComponents {
                     <i class="fas fa-robot"></i> AI ${Math.round(confidence * 100)}%
                 </span>`;
             case 'processing':
-                return '<span class="ai-badge ai-processing" title="Extracting..."><i class="fas fa-spinner fa-spin"></i> Processing</span>';
+                return '<span class="ai-badge ai-processing" title="AI pipeline running..."><i class="fas fa-spinner fa-spin"></i> Extracting</span>';
             case 'failed':
                 return `<span class="ai-badge ai-failed ai-badge-clickable" 
                     onclick="window.paperManager && window.paperManager.reExtractWithLLM(${paper.id}, event)" 

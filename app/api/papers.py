@@ -62,6 +62,12 @@ class Paper(BaseModel):
     ai_summary_long: Optional[str] = None
     ai_key_findings: Optional[List[str]] = None
     summary_generated_at: Optional[datetime] = None
+    summary_generation_method: Optional[str] = None
+    
+    # LLM Knowledge Check fields
+    llm_knowledge_check: Optional[bool] = None
+    llm_knowledge_confidence: Optional[float] = None
+    llm_knowledge_checked_at: Optional[datetime] = None
     
     # Relationships
     collections: List[CollectionBase] = []

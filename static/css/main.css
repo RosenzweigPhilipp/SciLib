@@ -276,6 +276,83 @@ body {
     background: #c82333;
 }
 
+/* Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.badge-auto {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.badge-manual {
+    background: #f0f0f0;
+    color: #666;
+    border: 1px solid #ddd;
+}
+
+.badge-success {
+    background: #28a745;
+    color: white;
+}
+
+.badge-warning {
+    background: #ffc107;
+    color: #333;
+}
+
+.summary-status-box {
+    background: #f0f8ff;
+    border: 2px solid #4a90e2;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.summary-status-box.processing {
+    background: #fff8e1;
+    border-color: #ffc107;
+}
+
+.summary-status-box i {
+    font-size: 1.25rem;
+    color: #4a90e2;
+}
+
+.summary-status-box.processing i {
+    color: #ffc107;
+}
+
+.summary-status-box span {
+    font-weight: 500;
+    color: #333;
+}
+
+.summary-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.summary-date {
+    color: #999;
+    font-size: 0.85rem;
+}
+
 /* Filter Options */
 .filter-options select {
     padding: 0.5rem 1rem;

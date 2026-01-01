@@ -176,6 +176,7 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
             result["errors"].append("Failed to update database")
         
         # Trigger smart collection classification and summary generation if extraction was successful
+        summary_task_id = None
         if update_success and result["extraction_status"] == "completed":
             try:
                 from ..database.models import Settings
@@ -191,7 +192,9 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
                     
                     # Check if LLM knows the paper and can provide summaries
                     logger.info(f"Checking if LLM has knowledge of paper {paper_id}")
-                    check_and_generate_summary_task.delay(paper_id)
+                    summary_task = check_and_generate_summary_task.delay(paper_id)
+                    summary_task_id = summary_task.id
+                    logger.info(f"Summary task ID: {summary_task_id}")
                     
                 finally:
                     db.close()
@@ -202,13 +205,19 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
         final_status = "SUCCESS" if result["extraction_status"] == "completed" else "FAILURE"
         
         logger.info(f"Completed extraction for paper {paper_id} with status: {final_status}")
+        logger.info(f"Returning summary_task_id: {summary_task_id}")
         
-        return {
+        result_dict = {
             "status": final_status,
             "paper_id": paper_id,
             "extraction_data": result,
-            "completed_at": datetime.now().isoformat()
+            "completed_at": datetime.now().isoformat(),
+            "summary_task_id": summary_task_id
         }
+        
+        logger.info(f"Full result dict: {result_dict}")
+        
+        return result_dict
         
     except Exception as e:
         logger.error(f"Extraction failed for paper {paper_id}: {str(e)}")
@@ -692,6 +701,7 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
                 if key_findings:
                     paper.ai_key_findings = key_findings
                 paper.summary_generated_at = datetime.now()
+                paper.summary_generation_method = "manual"
                 db.commit()
                 
                 logger.info(f"Successfully saved summaries for paper {paper_id}")
@@ -774,6 +784,12 @@ def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
             
             logger.info(f"LLM knowledge check for paper {paper_id}: has_knowledge={check_result['has_knowledge']}, confidence={check_result['confidence']}")
             
+            # Save knowledge check result to database
+            paper.llm_knowledge_check = check_result["has_knowledge"]
+            paper.llm_knowledge_confidence = check_result["confidence"]
+            paper.llm_knowledge_checked_at = datetime.now()
+            db.commit()
+            
             # If LLM knows the paper with good confidence, generate summaries
             if check_result["has_knowledge"] and check_result["confidence"] >= 0.7:
                 self.update_state(
@@ -781,32 +797,43 @@ def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
                     meta={"current": 50, "total": 100, "status": "LLM knows this paper! Generating summaries..."}
                 )
                 
+                logger.info(f"Generating summaries from LLM knowledge for paper {paper_id}")
                 summaries = service.generate_summaries_from_knowledge(
                     title=paper.title,
                     authors=paper.authors,
                     year=paper.year
                 )
                 
+                logger.info(f"Summary generation result: {summaries}")
+                
                 if "error" not in summaries:
                     # Save to database
-                    paper.ai_summary_short = summaries.get("short_summary")
-                    paper.ai_summary_long = summaries.get("long_summary")
-                    paper.ai_key_findings = summaries.get("key_findings")
-                    paper.summary_generated_at = datetime.now()
-                    db.commit()
+                    short = summaries.get("short_summary")
+                    long = summaries.get("long_summary")
+                    findings = summaries.get("key_findings")
                     
-                    logger.info(f"Successfully generated summaries from LLM knowledge for paper {paper_id}")
-                    
-                    return {
-                        "status": "SUCCESS",
-                        "paper_id": paper_id,
-                        "method": "llm_knowledge",
-                        "check_result": check_result,
-                        "summaries_generated": True,
-                        "completed_at": datetime.now().isoformat()
-                    }
+                    if short or long or findings:
+                        paper.ai_summary_short = short
+                        paper.ai_summary_long = long
+                        paper.ai_key_findings = findings
+                        paper.summary_generated_at = datetime.now()
+                        paper.summary_generation_method = "llm_knowledge"
+                        db.commit()
+                        
+                        logger.info(f"Successfully saved summaries for paper {paper_id}: short={bool(short)}, long={bool(long)}, findings={len(findings) if findings else 0}")
+                        
+                        return {
+                            "status": "SUCCESS",
+                            "paper_id": paper_id,
+                            "method": "llm_knowledge",
+                            "check_result": check_result,
+                            "summaries_generated": True,
+                            "completed_at": datetime.now().isoformat()
+                        }
+                    else:
+                        logger.warning(f"LLM returned empty summaries for paper {paper_id}")
                 else:
-                    logger.warning(f"Failed to generate summaries from LLM knowledge: {summaries.get('error')}")
+                    logger.error(f"Error generating summaries from LLM knowledge: {summaries.get('error')}")
             
             # LLM doesn't know the paper well enough - user can manually trigger full extraction
             logger.info(f"LLM does not have sufficient knowledge of paper {paper_id} (confidence: {check_result['confidence']}). Manual summary generation available.")

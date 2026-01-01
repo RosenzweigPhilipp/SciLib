@@ -467,6 +467,7 @@ class PaperManager {
         this.currentPage = 1;
         this.itemsPerPage = 20;
         this.totalPapers = 0;
+        this.activeSummaryTasks = new Set(); // Track papers with active summary generation
         this.setupPaperHandlers();
     }
 
@@ -659,7 +660,6 @@ class PaperManager {
     }
 
     async showPaperDetails(paperId) {
-        console.log('DEBUG: showPaperDetails called with ID:', paperId);
         try {
             const paper = await API.papers.get(paperId);
             const modal = document.getElementById('paper-details-modal');
@@ -668,13 +668,32 @@ class PaperManager {
             // Generate AI extraction info
             const aiInfo = this.generateAIExtractionInfo(paper);
             
-            // Add extraction status banner if processing
-            const statusBanner = paper.extraction_status === 'processing' ? `
-                <div class="extraction-status-banner processing" style="margin-bottom: 1rem;">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Extracting metadata...</span>
-                </div>
-            ` : '';
+            // Add status banner based on current state
+            let statusBanner = '';
+            const isGeneratingSummary = this.activeSummaryTasks.has(paper.id);
+            
+            if (paper.extraction_status === 'pending') {
+                statusBanner = `
+                    <div class="extraction-status-banner processing" style="margin-bottom: 1rem;">
+                        <i class="fas fa-clock"></i>
+                        <span>Waiting for extraction task to start...</span>
+                    </div>
+                `;
+            } else if (paper.extraction_status === 'processing') {
+                statusBanner = `
+                    <div class="extraction-status-banner processing" style="margin-bottom: 1rem;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>AI pipeline extracting metadata...</span>
+                    </div>
+                `;
+            } else if (isGeneratingSummary) {
+                statusBanner = `
+                    <div class="extraction-status-banner generating" style="margin-bottom: 1rem;">
+                        <i class="fas fa-magic fa-spin"></i>
+                        <span>Generating AI summaries...</span>
+                    </div>
+                `;
+            }
             
             content.innerHTML = `
                 ${statusBanner}
@@ -797,22 +816,80 @@ class PaperManager {
     
     generateSummaryButton(paper) {
         const hasSummaries = paper.ai_summary_short || paper.ai_summary_long || paper.ai_key_findings;
+        const isGenerating = this.activeSummaryTasks.has(paper.id);
+        
+        // Determine what stage we're in
+        let statusDisplay = '';
+        if (isGenerating) {
+            // Check if we have knowledge check results
+            if (paper.llm_knowledge_check === null) {
+                statusDisplay = `
+                    <div class="summary-status-box processing">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Checking if LLM has knowledge of this paper...</span>
+                    </div>
+                `;
+            } else if (paper.llm_knowledge_check === true && !hasSummaries) {
+                statusDisplay = `
+                    <div class="summary-status-box processing">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Generating summaries from LLM training data...</span>
+                    </div>
+                `;
+            } else if (paper.llm_knowledge_check === false && !hasSummaries) {
+                statusDisplay = `
+                    <div class="summary-status-box processing">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Extracting full paper text and generating summaries...</span>
+                    </div>
+                `;
+            }
+        }
+        
+        // Knowledge check indicator
+        let knowledgeIndicator = '';
+        if (paper.llm_knowledge_check !== null && paper.llm_knowledge_check !== undefined) {
+            if (paper.llm_knowledge_check) {
+                knowledgeIndicator = `<span class="badge badge-success" title="LLM has knowledge of this paper (confidence: ${(paper.llm_knowledge_confidence * 100).toFixed(0)}%)"><i class="fas fa-brain"></i> Known</span>`;
+            } else {
+                knowledgeIndicator = `<span class="badge badge-warning" title="LLM doesn't know this paper (confidence: ${(paper.llm_knowledge_confidence * 100).toFixed(0)}%)"><i class="fas fa-question"></i> Unknown</span>`;
+            }
+        }
         
         if (!hasSummaries) {
+            // Disable button if currently generating
+            const buttonDisabled = isGenerating ? 'disabled' : '';
+            const buttonText = isGenerating ? '<i class="fas fa-spinner fa-spin"></i> Generating...' : '<i class="fas fa-magic"></i> Generate AI Summary';
+            
             return `
+                ${statusDisplay}
                 <div class="summary-action">
-                    <button class="btn btn-primary" onclick="window.paperManager.generateSummary(${paper.id})">
-                        <i class="fas fa-magic"></i> Generate AI Summary
+                    ${knowledgeIndicator}
+                    <button class="btn btn-primary" onclick="window.paperManager.generateSummary(${paper.id})" ${buttonDisabled}>
+                        ${buttonText}
                     </button>
                 </div>
             `;
         }
         
+        // Determine generation method badge
+        let methodBadge = '';
+        if (paper.summary_generation_method === 'llm_knowledge') {
+            methodBadge = '<span class="badge badge-auto" title="Auto-generated from LLM training data"><i class="fas fa-bolt"></i> Auto</span>';
+        } else if (paper.summary_generation_method === 'manual') {
+            methodBadge = '<span class="badge badge-manual" title="Generated from full paper extraction"><i class="fas fa-user"></i> Manual</span>';
+        }
+        
         return `
+            ${statusDisplay}
             <div class="summary-action">
-                ${paper.summary_generated_at ? `<p class="summary-meta"><em>Generated on ${Utils.formatDate(paper.summary_generated_at)}</em></p>` : ''}
-                <button class="btn btn-secondary btn-sm" onclick="window.paperManager.generateSummary(${paper.id})">
-                    <i class="fas fa-sync"></i> Regenerate Summary
+                <div class="summary-info">
+                    ${knowledgeIndicator}
+                    ${methodBadge}
+                    ${paper.summary_generated_at ? `<span class="summary-date">Generated ${Utils.formatDate(paper.summary_generated_at)}</span>` : ''}
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="window.paperManager.generateSummary(${paper.id})" ${isGenerating ? 'disabled' : ''}>
+                    ${isGenerating ? '<i class="fas fa-spinner fa-spin"></i> Regenerating...' : '<i class="fas fa-sync"></i> Regenerate Summary'}
                 </button>
             </div>
         `;
@@ -946,6 +1023,12 @@ class PaperManager {
     
     async generateSummary(paperId, autoTriggered = false) {
         try {
+            // Mark as generating
+            this.activeSummaryTasks.add(paperId);
+            
+            // Refresh UI to show generating state
+            await this.showPaperDetails(paperId);
+            
             if (!autoTriggered) {
                 UIComponents.showNotification('Generating AI summary...', 'info');
             }
@@ -956,6 +1039,7 @@ class PaperManager {
             await this.pollTaskStatus(taskId, paperId, autoTriggered);
         } catch (error) {
             console.error('Error generating summary:', error);
+            this.activeSummaryTasks.delete(paperId);
             UIComponents.showNotification('Failed to generate summary', 'error');
         }
     }
@@ -968,17 +1052,43 @@ class PaperManager {
                 attempts++;
                 const status = await API.ai.getTaskStatus(taskId);
                 
+                console.log('Poll attempt', attempts, 'for task', taskId, '- Status:', status);
+                
                 if (status.status === 'completed') {
+                    console.log('Task completed! Refreshing paper details...');
+                    
+                    // Remove from active tasks
+                    this.activeSummaryTasks.delete(paperId);
+                    
                     if (!autoTriggered) {
                         UIComponents.showNotification('Summary generated successfully!', 'success');
                     }
-                    // Reload paper details to show new summary
+                    
+                    // Force reload paper details to show new summary
+                    const paper = await API.papers.get(paperId);
+                    console.log('Reloaded paper data:', paper);
+                    
                     await this.showPaperDetails(paperId);
+                    
+                    // Also reload the papers list to update the card
+                    await this.loadPapers();
+                    
                     return;
                 } else if (status.status === 'failed' || status.status === 'error') {
+                    console.log('Task failed:', status.error);
+                    
+                    // Remove from active tasks
+                    this.activeSummaryTasks.delete(paperId);
+                    
                     UIComponents.showNotification(`Summary generation failed: ${status.error || 'Unknown error'}`, 'error');
+                    
+                    // Still reload to show the knowledge check badge
+                    await this.showPaperDetails(paperId);
+                    await this.loadPapers();
+                    
                     return;
                 } else if (attempts >= maxAttempts) {
+                    console.log('Task polling timed out after', attempts, 'attempts');
                     UIComponents.showNotification('Summary generation timed out. Please refresh the page later.', 'warning');
                     return;
                 }
@@ -1094,7 +1204,6 @@ class PaperManager {
     }
 
     async showPaperDetailsWithExtraction(paperId, taskId = null) {
-        console.log('DEBUG: showPaperDetailsWithExtraction called with ID:', paperId, 'taskId:', taskId);
         try {
             const paper = await API.papers.get(paperId);
             
@@ -1122,6 +1231,7 @@ class PaperManager {
         const pollInterval = 2000; // 2 seconds
         const maxAttempts = 90; // 3 minutes max
         let attempts = 0;
+        let summaryTaskChecked = false;
 
         this.detailsPollingInterval = setInterval(async () => {
             attempts++;
@@ -1130,22 +1240,42 @@ class PaperManager {
                 const paper = await API.papers.get(paperId);
                 
                 if (paper.extraction_status === 'completed' || paper.extraction_status === 'failed') {
-                    // Stop polling and refresh the details view
+                    // Stop metadata polling
                     clearInterval(this.detailsPollingInterval);
                     this.detailsPollingInterval = null;
                     
-                    // Refresh the details modal if it's still open
-                    const modal = document.getElementById('paper-details-modal');
-                    if (modal && modal.classList.contains('active')) {
-                        await this.showPaperDetails(paperId);
-                        
-                        if (paper.extraction_status === 'completed') {
-                            UIComponents.showNotification('Metadata extraction completed!', 'success');
+                    if (paper.extraction_status === 'completed') {
+                        UIComponents.showNotification('Metadata extraction completed!', 'success');
+                    }
+                    
+                    // Reload papers list
+                    await this.loadPapers();
+                    
+                    // Check for summary task and start polling once
+                    if (!summaryTaskChecked) {
+                        summaryTaskChecked = true;
+                        try {
+                            const taskStatus = await API.ai.getTaskStatus(taskId);
+                            
+                            if (taskStatus.status === 'completed' && taskStatus.result && taskStatus.result.summary_task_id) {
+                                const summaryTaskId = taskStatus.result.summary_task_id;
+                                console.log('Starting summary polling for task:', summaryTaskId);
+                                
+                                // Mark as generating and refresh modal to show the banner
+                                this.activeSummaryTasks.add(paperId);
+                                await this.showPaperDetails(paperId);
+                                
+                                // Start polling for summary generation (will auto-refresh modal when done)
+                                this.pollTaskStatus(summaryTaskId, paperId, true);
+                            } else {
+                                console.log('No summary task found or task not completed yet');
+                            }
+                        } catch (error) {
+                            console.error('Error checking for summary task:', error);
                         }
                     }
                     
-                    // Reload papers list to show updated metadata
-                    await this.loadPapers();
+                    return;
                 }
                 
             } catch (error) {
@@ -1162,7 +1292,6 @@ class PaperManager {
     }
 
     async editPaper(paperId) {
-        console.log('DEBUG: editPaper called with ID:', paperId);
         try {
             const paper = await API.papers.get(paperId);
             this.currentEditingId = paperId;
@@ -1184,7 +1313,6 @@ class PaperManager {
     }
 
     async editPaperWithExtraction(paperId, taskId = null) {
-        console.log('DEBUG: editPaperWithExtraction called with ID:', paperId, 'taskId:', taskId);
         try {
             const paper = await API.papers.get(paperId);
             this.currentEditingId = paperId;
