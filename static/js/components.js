@@ -116,20 +116,27 @@ class UIComponents {
     // Create collection card
     static createCollectionCard(collection) {
         const card = document.createElement('div');
-        card.className = 'collection-card';
+        card.className = 'collection-badge-card';
+        if (collection.is_smart) {
+            card.classList.add('smart');
+        }
+        
+        // Store description for modal display
+        card.dataset.description = collection.description || '';
+        card.dataset.collectionId = collection.id;
+        
         card.innerHTML = `
-            <div class="collection-title">${Utils.sanitizeHtml(collection.name)}</div>
-            ${collection.description ? `<div class="collection-description">${Utils.sanitizeHtml(collection.description)}</div>` : ''}
-            <div class="collection-meta">
-                <span>Created ${Utils.formatDate(collection.created_at)}</span>
-                <div class="collection-actions">
-                    <button class="action-btn" onclick="window.collectionManager && window.collectionManager.editCollection(${collection.id})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="action-btn" onclick="window.collectionManager && window.collectionManager.deleteCollection(${collection.id})" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+            <div class="collection-badge-content">
+                ${collection.is_smart ? '<i class="fas fa-brain"></i>' : '<i class="fas fa-folder"></i>'}
+                <span class="collection-badge-name">${Utils.sanitizeHtml(collection.name)}</span>
+            </div>
+            <div class="collection-badge-actions">
+                <button class="badge-action-btn" onclick="event.stopPropagation(); window.collectionManager && window.collectionManager.editCollection(${collection.id})" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="badge-action-btn" onclick="event.stopPropagation(); window.collectionManager && window.collectionManager.deleteCollection(${collection.id})" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
         return card;
@@ -257,6 +264,8 @@ class UploadManager {
             const taskId = result && result.task_id ? result.task_id : null;
 
             UIComponents.showNotification('Paper uploaded successfully!', 'success');
+
+            // Smart collection classification will happen automatically after metadata extraction completes
 
             // Navigate to the paper details view immediately
             if (paper && window.paperManager) {

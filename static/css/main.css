@@ -287,9 +287,94 @@ body {
 }
 
 /* Lists and Cards */
-.papers-list, .collections-list, .tags-list {
+.papers-list {
     display: grid;
     gap: 1.5rem;
+}
+
+.collections-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.tags-list {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.collection-badge-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    background: #e3f2fd;
+    color: #1976d2;
+    border-radius: 24px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.collection-badge-card:hover {
+    background: #1976d2;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.collection-badge-card.smart {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.collection-badge-card.smart:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(118, 75, 162, 0.4);
+    filter: brightness(1.1);
+}
+
+.collection-badge-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.collection-badge-name {
+    font-weight: 500;
+}
+
+.collection-badge-actions {
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.collection-badge-card:hover .collection-badge-actions {
+    opacity: 1;
+}
+
+.badge-action-btn {
+    padding: 0.25rem 0.5rem;
+    border: none;
+    background: rgba(255, 255, 255, 0.2);
+    color: currentColor;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+}
+
+.badge-action-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.collection-badge-card:not(:hover) .collection-badge-actions {
+    display: none;
 }
 
 .paper-card, .collection-card {
@@ -301,9 +386,21 @@ body {
     border-left: 4px solid #007bff;
 }
 
+.collection-card {
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+}
+
 .paper-card:hover, .collection-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.collection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
 }
 
 .paper-title, .collection-title {
@@ -312,6 +409,11 @@ body {
     color: #333;
     margin-bottom: 0.5rem;
     cursor: pointer;
+}
+
+.collection-title {
+    margin-bottom: 0;
+    flex: 1;
 }
 
 .paper-title:hover {

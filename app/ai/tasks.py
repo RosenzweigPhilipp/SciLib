@@ -175,6 +175,23 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
             logger.error(f"Failed to update database for paper {paper_id}")
             result["errors"].append("Failed to update database")
         
+        # Trigger smart collection classification if extraction was successful
+        if update_success and result["extraction_status"] == "completed":
+            try:
+                from ..database.models import Settings
+                from ..database import SessionLocal
+                
+                db = SessionLocal()
+                try:
+                    enabled = Settings.get(db, "smart_collections_enabled", False)
+                    if enabled:
+                        logger.info(f"Triggering smart collection classification for paper {paper_id}")
+                        classify_paper_smart_collections_task.delay(paper_id)
+                finally:
+                    db.close()
+            except Exception as classification_error:
+                logger.error(f"Failed to trigger smart collection classification: {classification_error}")
+        
         # Final status
         final_status = "SUCCESS" if result["extraction_status"] == "completed" else "FAILURE"
         
@@ -769,21 +786,34 @@ def classify_paper_smart_collections_task(self, paper_id: int) -> Dict[str, Any]
                 meta={"current": 70, "total": 100, "status": "Adding to collections..."}
             )
             
+            # First, remove existing smart collections from this paper
+            existing_smart_collections = [c for c in paper.collections if c.is_smart]
+            for collection in existing_smart_collections:
+                paper.collections.remove(collection)
+            
             added_collections = []
-            for field_name in fields:
+            for field_data in fields:
+                field_name = field_data.get('name') if isinstance(field_data, dict) else field_data
+                field_description = field_data.get('description', f"Auto-generated collection for {field_name} research") if isinstance(field_data, dict) else f"Auto-generated collection for {field_name} research"
+                
+                # Check if collection exists (smart or not)
                 collection = db.query(Collection).filter(
-                    Collection.name == field_name,
-                    Collection.is_smart == True
+                    Collection.name == field_name
                 ).first()
                 
                 if not collection:
+                    # Create new smart collection with AI-generated description
                     collection = Collection(
                         name=field_name,
-                        description=f"Auto-generated collection for {field_name} research",
+                        description=field_description,
                         is_smart=True
                     )
                     db.add(collection)
                     db.flush()
+                elif not collection.is_smart:
+                    # Convert existing collection to smart with AI description
+                    collection.is_smart = True
+                    collection.description = field_description
                 
                 if collection not in paper.collections:
                     paper.collections.append(collection)
@@ -791,12 +821,13 @@ def classify_paper_smart_collections_task(self, paper_id: int) -> Dict[str, Any]
             
             db.commit()
             
-            logger.info(f"Paper {paper_id} classified into: {fields}")
+            field_names = [f.get('name') if isinstance(f, dict) else f for f in fields]
+            logger.info(f"Paper {paper_id} classified into: {field_names}")
             
             return {
                 "status": "SUCCESS",
                 "paper_id": paper_id,
-                "fields": fields,
+                "fields": field_names,
                 "added_collections": added_collections,
                 "completed_at": datetime.now().isoformat()
             }
@@ -844,29 +875,22 @@ def classify_all_papers_smart_collections_task(self) -> Dict[str, Any]:
             
             self.update_state(
                 state="PROGRESS",
-                meta={"current": 0, "total": total, "status": f"Processing {total} papers..."}
+                meta={"current": 0, "total": total, "status": f"Dispatching {total} classification tasks..."}
             )
             
-            # Classify each paper
-            results = []
-            for i, paper in enumerate(papers):
-                result = classify_paper_smart_collections_task.apply(args=[paper.id])
-                results.append(result.get())
-                
-                self.update_state(
-                    state="PROGRESS",
-                    meta={"current": i + 1, "total": total, "status": f"Processed {i + 1}/{total} papers"}
-                )
+            # Dispatch classification tasks asynchronously
+            task_ids = []
+            for paper in papers:
+                task = classify_paper_smart_collections_task.delay(paper.id)
+                task_ids.append(task.id)
             
-            # Count successes
-            successes = sum(1 for r in results if r.get("status") == "SUCCESS")
-            failures = sum(1 for r in results if r.get("status") == "FAILURE")
+            logger.info(f"Dispatched {len(task_ids)} classification tasks")
             
             return {
                 "status": "SUCCESS",
                 "total_papers": total,
-                "successes": successes,
-                "failures": failures,
+                "task_ids": task_ids,
+                "message": f"Dispatched {total} classification tasks",
                 "completed_at": datetime.now().isoformat()
             }
             

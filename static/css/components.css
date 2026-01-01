@@ -1057,6 +1057,12 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+.panel-description {
+    color: #666;
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+
 .smart-collections-header {
     display: flex;
     justify-content: space-between;
@@ -1181,4 +1187,155 @@ input:checked + .toggle-slider:before {
 .smart-collection-item .count {
     color: #666;
     font-size: 0.9rem;
+}
+/* Collection Papers Modal */
+.collection-header {
+    margin-bottom: 1.5rem;
+}
+
+.collection-header h3 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.collection-description {
+    color: #666;
+    margin: 0.5rem 0 1rem 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.collection-meta {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.collection-meta .smart-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.collection-papers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.collection-paper-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.collection-paper-item:hover {
+    background: #e3f2fd;
+    border-color: #1976d2;
+    transform: translateX(5px);
+}
+
+.paper-title-area h4 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+    font-size: 1rem;
+}
+
+.paper-title-area .paper-authors {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.paper-meta-area {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.paper-meta-area .year {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.paper-meta-area .journal {
+    color: #666;
+}
+
+.collection-paper-item i.fa-chevron-right {
+    color: #1976d2;
+    font-size: 1.2rem;
+}
+
+/* Paper Collections Section in Details Modal */
+.paper-collections-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.paper-collections-section h4 {
+    margin: 0 0 0.75rem 0;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+}
+
+.collection-badges-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.collection-badge-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 1rem;
+    background: #e3f2fd;
+    color: #1976d2;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.collection-badge-item:hover {
+    background: #1976d2;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(25, 118, 210, 0.3);
+}
+
+.collection-badge-item.smart {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.collection-badge-item.smart:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(118, 75, 162, 0.4);
+    filter: brightness(1.1);
 }

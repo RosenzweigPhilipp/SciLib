@@ -242,9 +242,113 @@ class App {
 
 // Dashboard Manager
 class DashboardManager {
+    constructor() {
+        this.setupSmartCollections();
+    }
+
     async loadDashboard() {
         await this.loadStats();
         await this.loadRecentPapers();
+        await this.loadSmartCollectionsStatus();
+    }
+
+    setupSmartCollections() {
+        const toggle = document.getElementById('smart-collections-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', async (e) => {
+                await this.toggleSmartCollections(e.target.checked);
+            });
+        }
+    }
+
+    async loadSmartCollectionsStatus() {
+        try {
+            const panel = document.getElementById('smart-collections-panel');
+            if (panel) {
+                panel.style.display = 'block';
+            }
+
+            const status = await API.smartCollections.getStatus();
+            
+            // Update toggle
+            const toggle = document.getElementById('smart-collections-toggle');
+            const label = document.getElementById('smart-toggle-label');
+            if (toggle && label) {
+                toggle.checked = status.enabled;
+                label.textContent = status.enabled ? 'Enabled' : 'Disabled';
+            }
+
+            // Update stats
+            const statsContainer = document.getElementById('smart-collections-stats');
+            if (statsContainer) {
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${status.total_smart_collections || 0}</div>
+                        <div class="stat-label">Research Fields</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${status.classified_papers || 0}</div>
+                        <div class="stat-label">Classified Papers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${status.unclassified_papers || 0}</div>
+                        <div class="stat-label">Unclassified</div>
+                    </div>
+                `;
+            }
+
+            // Update collections list
+            const listContainer = document.getElementById('smart-collections-list');
+            if (listContainer && status.smart_collections && status.smart_collections.length > 0) {
+                listContainer.innerHTML = status.smart_collections
+                    .sort((a, b) => b.paper_count - a.paper_count)
+                    .slice(0, 10)
+                    .map(c => `
+                        <div class="smart-collection-item">
+                            <span class="name"><i class="fas fa-brain"></i> ${Utils.sanitizeHtml(c.name)}</span>
+                            <span class="count">${c.paper_count} papers</span>
+                        </div>
+                    `).join('');
+            } else if (listContainer) {
+                listContainer.innerHTML = '<p style="text-align: center; color: #777; padding: 1rem;">No smart collections yet</p>';
+            }
+        } catch (error) {
+            console.error('Error loading smart collections status:', error);
+        }
+    }
+
+    async toggleSmartCollections(enabled) {
+        try {
+            const label = document.getElementById('smart-toggle-label');
+            if (label) {
+                label.textContent = enabled ? 'Enabling...' : 'Disabling...';
+            }
+
+            const result = await API.smartCollections.toggle(enabled);
+            
+            if (enabled && result.task_id) {
+                UIComponents.showNotification('Smart collections enabled. Classifying all papers...', 'info');
+            } else {
+                UIComponents.showNotification(`Smart collections ${enabled ? 'enabled' : 'disabled'}`, 'success');
+            }
+
+            // Reload status and papers after a delay to show updated stats
+            setTimeout(() => {
+                this.loadSmartCollectionsStatus();
+                if (window.paperManager) {
+                    window.paperManager.loadPapers();
+                }
+            }, 2000);
+        } catch (error) {
+            console.error('Error toggling smart collections:', error);
+            UIComponents.showNotification('Failed to toggle smart collections', 'error');
+            
+            // Revert toggle
+            const toggle = document.getElementById('smart-collections-toggle');
+            if (toggle) {
+                toggle.checked = !enabled;
+            }
+        }
     }
 
     async loadStats() {
@@ -516,9 +620,6 @@ class PaperManager {
                 </div>
             ` : '';
             
-            // Generate citations section
-            const citationsSection = this.generateCitationsSection(paper);
-            
             content.innerHTML = `
                 ${statusBanner}
                 <div class="paper-header">
@@ -538,7 +639,6 @@ class PaperManager {
                 </div>
                 
                 ${aiInfo}
-                ${citationsSection}
                 
                 <div class="content-tabs">
                     <div class="tabs-header">
@@ -564,6 +664,8 @@ class PaperManager {
                 </div>
                 
                 ${this.generateSummaryButton(paper)}
+                
+                ${this.generateCollectionsSection(paper)}
                 
                 ${paper.keywords ? `
                     <div class="paper-keywords">
@@ -706,6 +808,28 @@ class PaperManager {
                     <button class="btn btn-secondary btn-sm" onclick="window.paperManager.showCitations(${paper.id})">
                         <i class="fas fa-network-wired"></i> View Citation Network
                     </button>
+                </div>
+            </div>
+        `;
+    }
+
+    generateCollectionsSection(paper) {
+        if (!paper.collections || paper.collections.length === 0) {
+            return '';
+        }
+        
+        return `
+            <div class="paper-collections-section">
+                <h4><i class="fas fa-folder"></i> Collections</h4>
+                <div class="collection-badges-list">
+                    ${paper.collections.map(c => `
+                        <div class="collection-badge-item${c.is_smart ? ' smart' : ''}" 
+                             onclick="window.collectionManager.viewCollectionPapers(${c.id}, event)" 
+                             title="${Utils.sanitizeHtml(c.description || c.name)}">
+                            ${c.is_smart ? '<i class="fas fa-brain"></i> ' : '<i class="fas fa-folder"></i> '}
+                            ${Utils.sanitizeHtml(c.name)}
+                        </div>
+                    `).join('')}
                 </div>
             </div>
         `;
@@ -911,20 +1035,7 @@ class PaperManager {
             }
             aiSection += `</div>`;
             
-            if (paper.extraction_metadata) {
-                try {
-                    const metadata = typeof paper.extraction_metadata === 'string' 
-                        ? JSON.parse(paper.extraction_metadata) 
-                        : paper.extraction_metadata;
-                    if (metadata && Object.keys(metadata).length > 0) {
-                        aiSection += '<div class="ai-metadata">';
-                        aiSection += '<p><em>This papers metadata was automatically extracted using AI from PDF content and scientific databases.</em></p>';
-                        aiSection += '</div>';
-                    }
-                } catch (e) {
-                    // Ignore JSON parse errors
-                }
-            }
+            // Metadata info removed per user request
         } else if (paper.extraction_status === 'failed') {
             aiSection += '<div class="ai-error">';
             aiSection += '<p><i class="fas fa-exclamation-triangle"></i> AI extraction failed. This paper was entered manually.</p>';
@@ -940,8 +1051,8 @@ class PaperManager {
         try {
             const paper = await API.papers.get(paperId);
             
-            // If processing, start polling and then show details
-            if (paper.extraction_status === 'processing' || taskId) {
+            // If processing AND we have a valid taskId, start polling
+            if (paper.extraction_status === 'processing' && taskId && taskId !== 'undefined') {
                 // Start polling for updates
                 this.startMetadataPollingForDetails(paperId, taskId);
             }
@@ -1347,6 +1458,21 @@ class CollectionManager {
     }
 
     setupCollectionHandlers() {
+        const addButton = document.getElementById('add-collection-btn');
+        if (addButton) {
+            addButton.addEventListener('click', () => this.showCreateModal());
+        }
+
+        const deleteAllButton = document.getElementById('delete-all-collections-btn');
+        if (deleteAllButton) {
+            deleteAllButton.addEventListener('click', () => this.deleteAllCollections());
+        }
+
+        const reclassifyAllButton = document.getElementById('reclassify-all-btn');
+        if (reclassifyAllButton) {
+            reclassifyAllButton.addEventListener('click', () => this.reclassifyAllPapers());
+        }
+
         const collectionForm = document.getElementById('collection-form');
         if (collectionForm) {
             collectionForm.addEventListener('submit', (e) => {
@@ -1382,9 +1508,86 @@ class CollectionManager {
             container.innerHTML = '';
             collections.forEach(collection => {
                 const card = UIComponents.createCollectionCard(collection);
+                // Add click handler to view papers
+                card.style.cursor = 'pointer';
+                card.addEventListener('click', (e) => {
+                    // Don't trigger if clicking action buttons
+                    if (!e.target.closest('.action-btn')) {
+                        this.viewCollectionPapers(collection.id);
+                    }
+                });
                 container.appendChild(card);
             });
         }
+    }
+
+    async viewCollectionPapers(collectionId, event = null) {
+        if (event) {
+            event.stopPropagation();
+        }
+        
+        try {
+            const collection = await API.collections.get(collectionId);
+            const modal = document.getElementById('collection-papers-modal') || this.createCollectionPapersModal();
+            const content = document.getElementById('collection-papers-content');
+            
+            content.innerHTML = `
+                <div class="collection-header">
+                    <h3>
+                        ${collection.is_smart ? '<i class="fas fa-brain" style="color: #764ba2;"></i>' : '<i class="fas fa-folder"></i>'}
+                        ${Utils.sanitizeHtml(collection.name)}
+                    </h3>
+                </div>
+                ${collection.description ? `<p class="collection-description" style="margin-top: 0.5rem; margin-bottom: 1rem; color: #666;">${Utils.sanitizeHtml(collection.description)}</p>` : ''}
+                    <div class="collection-meta">
+                        <span><i class="fas fa-file-pdf"></i> ${collection.papers ? collection.papers.length : 0} papers</span>
+                        ${collection.is_smart ? '<span class="smart-badge"><i class="fas fa-brain"></i> Smart Collection</span>' : ''}
+                    </div>
+                </div>
+                
+                <div class="collection-papers-list">
+                    ${collection.papers && collection.papers.length > 0 ? 
+                        collection.papers.map(paper => `
+                            <div class="collection-paper-item" onclick="window.paperManager.showPaperDetails(${paper.id}); UIComponents.hideModal('collection-papers-modal');">
+                                <div class="paper-title-area">
+                                    <h4>${Utils.sanitizeHtml(paper.title)}</h4>
+                                    <p class="paper-authors">${Utils.sanitizeHtml(paper.authors)}</p>
+                                </div>
+                                <div class="paper-meta-area">
+                                    ${paper.year ? `<span class="year">${paper.year}</span>` : ''}
+                                    ${paper.journal ? `<span class="journal">${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('') 
+                        : '<p class="empty-message">No papers in this collection yet</p>'
+                    }
+                </div>
+            `;
+            
+            UIComponents.showModal('collection-papers-modal');
+        } catch (error) {
+            console.error('Error loading collection papers:', error);
+            UIComponents.showNotification('Failed to load collection papers', 'error');
+        }
+    }
+
+    createCollectionPapersModal() {
+        const modal = document.createElement('div');
+        modal.id = 'collection-papers-modal';
+        modal.className = 'modal large';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Collection Papers</h2>
+                    <button class="close-btn" onclick="UIComponents.hideModal('collection-papers-modal')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body" id="collection-papers-content"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        return modal;
     }
 
     showCreateModal() {
@@ -1462,6 +1665,74 @@ class CollectionManager {
         } catch (error) {
             console.error('Error deleting collection:', error);
             UIComponents.showNotification('Failed to delete collection', 'error');
+        }
+    }
+
+    async deleteAllCollections() {
+        const confirmed = await UIComponents.confirm(
+            'Are you sure you want to delete ALL collections? This action cannot be undone.'
+        );
+        if (!confirmed) return;
+
+        try {
+            // Delete all regular collections
+            const deletePromises = this.collections
+                .filter(c => !c.is_smart)
+                .map(c => API.collections.delete(c.id));
+            
+            await Promise.all(deletePromises);
+
+            // Clear smart collections
+            const smartCollectionsEnabled = await API.smartCollections.getStatus();
+            if (smartCollectionsEnabled && smartCollectionsEnabled.enabled) {
+                await API.smartCollections.clear();
+            }
+
+            UIComponents.showNotification('All collections deleted successfully', 'success');
+            this.loadCollections();
+            
+            // Update dashboard stats and smart collections display
+            if (window.dashboardManager) {
+                window.dashboardManager.loadStats();
+                window.dashboardManager.loadSmartCollectionsStatus();
+            }
+        } catch (error) {
+            console.error('Error deleting all collections:', error);
+            UIComponents.showNotification('Failed to delete all collections: ' + error.message, 'error');
+        }
+    }
+
+    async reclassifyAllPapers() {
+        const confirmed = await UIComponents.confirm(
+            'Re-classify all papers with smart collections? This may take several minutes depending on the number of papers.'
+        );
+        if (!confirmed) return;
+
+        try {
+            const result = await API.smartCollections.classifyAll();
+            
+            if (result.task_ids && result.task_ids.length > 0) {
+                UIComponents.showNotification(
+                    `Started re-classification of ${result.task_ids.length} papers. This will run in the background.`,
+                    'success'
+                );
+            } else {
+                UIComponents.showNotification('No papers to classify', 'info');
+            }
+
+            // Reload collections and papers after a short delay to show initial results
+            setTimeout(() => {
+                this.loadCollections();
+                if (window.dashboardManager) {
+                    window.dashboardManager.loadSmartCollectionsStatus();
+                }
+                if (window.paperManager) {
+                    window.paperManager.loadPapers();
+                }
+            }, 3000);
+        } catch (error) {
+            console.error('Error re-classifying papers:', error);
+            UIComponents.showNotification('Failed to start re-classification: ' + error.message, 'error');
         }
     }
 }

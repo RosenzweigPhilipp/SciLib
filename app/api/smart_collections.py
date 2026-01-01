@@ -136,10 +136,12 @@ async def classify_single_paper(
         
         enabled = Settings.get(db, "smart_collections_enabled", False)
         if not enabled:
-            raise HTTPException(
-                status_code=400,
-                detail="Smart collections is not enabled. Enable it first."
-            )
+            # Return success but indicate it was skipped
+            return {
+                "paper_id": paper_id,
+                "status": "skipped",
+                "message": "Smart collections is not enabled"
+            }
         
         task = classify_paper_smart_collections_task.delay(paper_id)
         
