@@ -139,6 +139,79 @@ class API {
     static ai = {
         async getTaskStatus(taskId) {
             return API.request(`/ai/status/${taskId}`);
+        },
+        
+        // Summaries
+        async generateSummary(paperId) {
+            return API.request(`/ai/summarize/${paperId}`, { method: 'POST' });
+        },
+        
+        // Recommendations
+        async getRecommendations(paperId, limit = 5) {
+            return API.request(`/recommendations/${paperId}?limit=${limit}`);
+        },
+        
+        // Search
+        async semanticSearch(query, limit = 10, searchType = 'hybrid') {
+            return API.request(`/search?query=${encodeURIComponent(query)}&limit=${limit}&search_type=${searchType}`);
+        },
+        
+        // External Discovery
+        async discoverPapers(query, limit = 10) {
+            return API.request(`/discover/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        },
+        
+        async addDiscoveredPaper(paperData) {
+            return API.request('/discover/add', {
+                method: 'POST',
+                body: JSON.stringify(paperData)
+            });
+        }
+    };
+    
+    // Citations API
+    static citations = {
+        async getPaperCitations(paperId) {
+            return API.request(`/citations/paper/${paperId}`);
+        },
+        
+        async addCitation(citingPaperId, citedPaperId, context = null) {
+            return API.request('/citations/add', {
+                method: 'POST',
+                body: JSON.stringify({ citing_paper_id: citingPaperId, cited_paper_id: citedPaperId, context })
+            });
+        },
+        
+        async removeCitation(citingPaperId, citedPaperId) {
+            return API.request(`/citations/${citingPaperId}/${citedPaperId}`, { method: 'DELETE' });
+        },
+        
+        async calculateInfluence(paperId) {
+            return API.request(`/citations/paper/${paperId}/calculate-influence`, { method: 'POST' });
+        },
+        
+        async fetchExternalCitations(paperId) {
+            return API.request(`/citations/paper/${paperId}/fetch-external`, { method: 'POST' });
+        },
+        
+        async getInfluentialPapers(limit = 10) {
+            return API.request(`/citations/influential?limit=${limit}`);
+        },
+        
+        async getMostCited(limit = 10) {
+            return API.request(`/citations/most-cited?limit=${limit}`);
+        },
+        
+        async getNetwork() {
+            return API.request('/citations/network');
+        },
+        
+        async getClusters() {
+            return API.request('/citations/clusters');
+        },
+        
+        async getStats() {
+            return API.request('/citations/stats');
         }
     };
 

@@ -516,6 +516,12 @@ class PaperManager {
                 </div>
             ` : '';
             
+            // Generate AI summaries section
+            const summariesSection = this.generateSummariesSection(paper);
+            
+            // Generate citations section
+            const citationsSection = this.generateCitationsSection(paper);
+            
             content.innerHTML = `
                 ${statusBanner}
                 <div class="paper-header">
@@ -535,6 +541,8 @@ class PaperManager {
                 </div>
                 
                 ${aiInfo}
+                ${citationsSection}
+                ${summariesSection}
                 
                 ${paper.abstract ? `
                     <div class="paper-abstract">
@@ -549,12 +557,231 @@ class PaperManager {
                         <p>${Utils.sanitizeHtml(paper.keywords)}</p>
                     </div>
                 ` : ''}
+                
+                <div id="recommendations-section"></div>
             `;
             
             UIComponents.showModal('paper-details-modal');
+            
+            // Load recommendations asynchronously
+            this.loadRecommendations(paperId);
+            
         } catch (error) {
             console.error('Error loading paper details:', error);
             UIComponents.showNotification('Failed to load paper details', 'error');
+        }
+    }
+    
+    generateSummariesSection(paper) {
+        if (!paper.ai_summary_short && !paper.ai_summary_long && !paper.ai_key_findings) {
+            return `
+                <div class="ai-summaries-section">
+                    <h4><i class="fas fa-brain"></i> AI Summary</h4>
+                    <button class="btn btn-primary" onclick="window.paperManager.generateSummary(${paper.id})">
+                        <i class="fas fa-magic"></i> Generate AI Summary
+                    </button>
+                </div>
+            `;
+        }
+        
+        let summariesHTML = '<div class="ai-summaries-section"><h4><i class="fas fa-brain"></i> AI Summary</h4>';
+        
+        if (paper.ai_summary_short) {
+            summariesHTML += `
+                <div class="summary-box">
+                    <h5><i class="fas fa-compress-alt"></i> Short Summary</h5>
+                    <p>${Utils.sanitizeHtml(paper.ai_summary_short)}</p>
+                </div>
+            `;
+        }
+        
+        if (paper.ai_key_findings) {
+            const findings = Array.isArray(paper.ai_key_findings) ? paper.ai_key_findings : 
+                            (typeof paper.ai_key_findings === 'string' ? JSON.parse(paper.ai_key_findings) : []);
+            if (findings.length > 0) {
+                summariesHTML += `
+                    <div class="summary-box">
+                        <h5><i class="fas fa-lightbulb"></i> Key Findings</h5>
+                        <ul class="findings-list">
+                            ${findings.map(f => `<li>${Utils.sanitizeHtml(f)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+        
+        if (paper.ai_summary_long) {
+            summariesHTML += `
+                <div class="summary-box">
+                    <h5><i class="fas fa-align-left"></i> Detailed Summary</h5>
+                    <p>${Utils.sanitizeHtml(paper.ai_summary_long)}</p>
+                </div>
+            `;
+        }
+        
+        if (paper.summary_generated_at) {
+            summariesHTML += `<p class="summary-meta"><em>Generated on ${Utils.formatDate(paper.summary_generated_at)}</em></p>`;
+        }
+        
+        summariesHTML += `
+            <button class="btn btn-secondary btn-sm" onclick="window.paperManager.generateSummary(${paper.id})">
+                <i class="fas fa-sync"></i> Regenerate Summary
+            </button>
+        </div>`;
+        
+        return summariesHTML;
+    }
+    
+    generateCitationsSection(paper) {
+        const citationCount = paper.citation_count || 0;
+        const externalCount = paper.external_citation_count || 0;
+        const influenceScore = paper.influence_score || 0;
+        const hIndex = paper.h_index || 0;
+        
+        return `
+            <div class="citations-section">
+                <h4><i class="fas fa-quote-right"></i> Citation Metrics</h4>
+                <div class="citation-metrics">
+                    <div class="metric-item">
+                        <span class="metric-value">${citationCount}</span>
+                        <span class="metric-label">Internal Citations</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-value">${externalCount}</span>
+                        <span class="metric-label">External Citations</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-value">${influenceScore.toFixed(3)}</span>
+                        <span class="metric-label">Influence Score</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-value">${hIndex}</span>
+                        <span class="metric-label">H-Index</span>
+                    </div>
+                </div>
+                <div class="citation-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="window.paperManager.fetchExternalCitations(${paper.id})">
+                        <i class="fas fa-cloud-download-alt"></i> Fetch External Citations
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.paperManager.calculateInfluence(${paper.id})">
+                        <i class="fas fa-calculator"></i> Calculate Influence
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="window.paperManager.showCitations(${paper.id})">
+                        <i class="fas fa-network-wired"></i> View Citation Network
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    async loadRecommendations(paperId) {
+        const container = document.getElementById('recommendations-section');
+        if (!container) return;
+        
+        container.innerHTML = `
+            <div class="recommendations-section">
+                <h4><i class="fas fa-star"></i> Similar Papers</h4>
+                <div class="loading">Loading recommendations...</div>
+            </div>
+        `;
+        
+        try {
+            const recommendations = await API.ai.getRecommendations(paperId, 5);
+            
+            if (!recommendations || recommendations.length === 0) {
+                container.innerHTML = `
+                    <div class="recommendations-section">
+                        <h4><i class="fas fa-star"></i> Similar Papers</h4>
+                        <p class="no-data">No similar papers found in your library.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let recsHTML = `
+                <div class="recommendations-section">
+                    <h4><i class="fas fa-star"></i> Similar Papers</h4>
+                    <div class="recommendations-list">
+            `;
+            
+            recommendations.forEach((rec, idx) => {
+                recsHTML += `
+                    <div class="recommendation-item">
+                        <div class="rec-rank">#${idx + 1}</div>
+                        <div class="rec-content">
+                            <div class="rec-title" onclick="window.paperManager.showPaperDetails(${rec.id})">
+                                ${Utils.sanitizeHtml(rec.title)}
+                            </div>
+                            <div class="rec-authors">${Utils.sanitizeHtml(rec.authors)}</div>
+                            <div class="rec-score">
+                                <span class="score-label">Similarity:</span>
+                                <span class="score-value">${(rec.score * 100).toFixed(1)}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            recsHTML += '</div></div>';
+            container.innerHTML = recsHTML;
+            
+        } catch (error) {
+            console.error('Error loading recommendations:', error);
+            container.innerHTML = `
+                <div class="recommendations-section">
+                    <h4><i class="fas fa-star"></i> Similar Papers</h4>
+                    <p class="error-message">Failed to load recommendations.</p>
+                </div>
+            `;
+        }
+    }
+    
+    async generateSummary(paperId) {
+        try {
+            UIComponents.showNotification('Generating AI summary...', 'info');
+            await API.ai.generateSummary(paperId);
+            UIComponents.showNotification('Summary generated successfully!', 'success');
+            // Reload paper details
+            await this.showPaperDetails(paperId);
+        } catch (error) {
+            console.error('Error generating summary:', error);
+            UIComponents.showNotification('Failed to generate summary', 'error');
+        }
+    }
+    
+    async fetchExternalCitations(paperId) {
+        try {
+            UIComponents.showNotification('Fetching external citations...', 'info');
+            const result = await API.citations.fetchExternalCitations(paperId);
+            UIComponents.showNotification(`Found ${result.external_citations} external citations`, 'success');
+            await this.showPaperDetails(paperId);
+        } catch (error) {
+            console.error('Error fetching citations:', error);
+            UIComponents.showNotification('Failed to fetch external citations', 'error');
+        }
+    }
+    
+    async calculateInfluence(paperId) {
+        try {
+            UIComponents.showNotification('Calculating influence score...', 'info');
+            const result = await API.citations.calculateInfluence(paperId);
+            UIComponents.showNotification(`Influence score: ${result.influence_score.toFixed(3)}`, 'success');
+            await this.showPaperDetails(paperId);
+        } catch (error) {
+            console.error('Error calculating influence:', error);
+            UIComponents.showNotification('Failed to calculate influence', 'error');
+        }
+    }
+    
+    async showCitations(paperId) {
+        try {
+            const citations = await API.citations.getPaperCitations(paperId);
+            // TODO: Show citations in a modal or expand section
+            console.log('Citations:', citations);
+            alert(`This paper has ${citations.citation_count} citations and references ${citations.reference_count} papers`);
+        } catch (error) {
+            console.error('Error loading citations:', error);
+            UIComponents.showNotification('Failed to load citations', 'error');
         }
     }
 
