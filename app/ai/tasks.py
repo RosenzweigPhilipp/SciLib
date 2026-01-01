@@ -189,13 +189,10 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
                         logger.info(f"Triggering smart collection classification for paper {paper_id}")
                         classify_paper_smart_collections_task.delay(paper_id)
                     
-                    # Trigger summary generation if enabled
-                    summaries_auto_enabled = Settings.get(db, "summaries_auto_enabled", False)
-                    if summaries_auto_enabled:
-                        logger.info(f"Triggering automatic summary generation for paper {paper_id}")
-                        generate_paper_summary_task.delay(paper_id)
-                    else:
-                        logger.info(f"Skipping automatic summary generation for paper {paper_id} (disabled in settings)")
+                    # Check if LLM knows the paper and can provide summaries
+                    logger.info(f"Checking if LLM has knowledge of paper {paper_id}")
+                    check_and_generate_summary_task.delay(paper_id)
+                    
                 finally:
                     db.close()
             except Exception as background_error:
@@ -729,6 +726,113 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
             "error": str(e),
             "failed_at": datetime.now().isoformat()
         }
+
+
+@celery_app.task(bind=True, name="check_and_generate_summary")
+def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
+    """
+    Check if LLM knows the paper, then generate summaries if it does.
+    This is much more token-efficient than extracting from full text.
+    
+    Args:
+        paper_id: Database ID of the paper
+        
+    Returns:
+        Dict with check results and summary generation status
+    """
+    try:
+        self.update_state(
+            state="PROGRESS",
+            meta={"current": 0, "total": 100, "status": "Checking if LLM knows this paper..."}
+        )
+        
+        logger.info(f"Checking LLM knowledge for paper {paper_id}")
+        
+        from ..database import SessionLocal
+        from ..database.models import Paper
+        from .services.paper_knowledge_check import PaperKnowledgeService
+        
+        db = SessionLocal()
+        try:
+            # Get paper
+            paper = db.query(Paper).filter(Paper.id == paper_id).first()
+            if not paper:
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found"
+                }
+            
+            # Check if LLM knows the paper
+            service = PaperKnowledgeService(os.getenv("OPENAI_API_KEY"))
+            check_result = service.check_paper_knowledge(
+                title=paper.title,
+                authors=paper.authors,
+                year=paper.year,
+                doi=paper.doi
+            )
+            
+            logger.info(f"LLM knowledge check for paper {paper_id}: has_knowledge={check_result['has_knowledge']}, confidence={check_result['confidence']}")
+            
+            # If LLM knows the paper with good confidence, generate summaries
+            if check_result["has_knowledge"] and check_result["confidence"] >= 0.7:
+                self.update_state(
+                    state="PROGRESS",
+                    meta={"current": 50, "total": 100, "status": "LLM knows this paper! Generating summaries..."}
+                )
+                
+                summaries = service.generate_summaries_from_knowledge(
+                    title=paper.title,
+                    authors=paper.authors,
+                    year=paper.year
+                )
+                
+                if "error" not in summaries:
+                    # Save to database
+                    paper.ai_summary_short = summaries.get("short_summary")
+                    paper.ai_summary_long = summaries.get("long_summary")
+                    paper.ai_key_findings = summaries.get("key_findings")
+                    paper.summary_generated_at = datetime.now()
+                    db.commit()
+                    
+                    logger.info(f"Successfully generated summaries from LLM knowledge for paper {paper_id}")
+                    
+                    return {
+                        "status": "SUCCESS",
+                        "paper_id": paper_id,
+                        "method": "llm_knowledge",
+                        "check_result": check_result,
+                        "summaries_generated": True,
+                        "completed_at": datetime.now().isoformat()
+                    }
+                else:
+                    logger.warning(f"Failed to generate summaries from LLM knowledge: {summaries.get('error')}")
+            
+            # LLM doesn't know the paper well enough - user can manually trigger full extraction
+            logger.info(f"LLM does not have sufficient knowledge of paper {paper_id} (confidence: {check_result['confidence']}). Manual summary generation available.")
+            
+            return {
+                "status": "SUCCESS",
+                "paper_id": paper_id,
+                "method": "check_only",
+                "check_result": check_result,
+                "summaries_generated": False,
+                "message": "LLM does not know this paper. Use manual summary generation.",
+                "completed_at": datetime.now().isoformat()
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"Knowledge check failed for paper {paper_id}: {str(e)}", exc_info=True)
+        return {
+            "status": "FAILURE",
+            "paper_id": paper_id,
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }
+
 
 @celery_app.task(bind=True, name="classify_paper_smart_collections")
 def classify_paper_smart_collections_task(self, paper_id: int) -> Dict[str, Any]:
