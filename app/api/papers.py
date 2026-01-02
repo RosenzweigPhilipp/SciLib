@@ -759,3 +759,71 @@ async def get_paper_bibtex(
             "Content-Disposition": f'attachment; filename="{cite_key}.bib"'
         }
     )
+
+
+@router.post("/{paper_id}/organize-pdf")
+def organize_paper_pdf(
+    paper_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually trigger PDF organization/renaming for a paper.
+    Uses the same naming format as automatic organization: {author} - {year} - {title}.pdf
+    """
+    from ..ai.tasks import organize_pdf_file
+    
+    # Get the paper
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    # Check if paper has a file
+    if not paper.file_path or not os.path.exists(paper.file_path):
+        raise HTTPException(status_code=400, detail="Paper PDF file not found")
+    
+    # Build metadata dictionary from paper fields
+    metadata = {
+        "title": paper.title,
+        "year": paper.year,
+        "authors": []
+    }
+    
+    # Parse authors
+    if paper.authors:
+        # Simple parsing - split by comma or semicolon
+        author_list = [a.strip() for a in paper.authors.replace(';', ',').split(',') if a.strip()]
+        for author_name in author_list:
+            # Try to split into given/family
+            parts = author_name.split()
+            if len(parts) >= 2:
+                metadata["authors"].append({
+                    "given": " ".join(parts[:-1]),
+                    "family": parts[-1]
+                })
+            else:
+                metadata["authors"].append({
+                    "given": "",
+                    "family": author_name
+                })
+    
+    # Attempt to organize the PDF
+    new_path = organize_pdf_file(paper_id, paper.file_path, metadata)
+    
+    if not new_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to organize PDF. Check that the paper has sufficient metadata (title required)."
+        )
+    
+    # Update database if path changed
+    if new_path != paper.file_path:
+        paper.file_path = new_path
+        db.commit()
+        db.refresh(paper)
+    
+    return {
+        "success": True,
+        "message": "PDF organized successfully",
+        "new_path": new_path,
+        "filename": os.path.basename(new_path)
+    }

@@ -722,9 +722,12 @@ class PaperManager {
                     ${paper.extracted_at ? `<div class="meta-item"><label>AI Extracted</label><value>${Utils.formatDate(paper.extracted_at)}</value></div>` : ''}
                 </div>
                 
-                <div class="action-buttons" style="margin: 1rem 0; display: flex; gap: 0.5rem;">
+                <div class="action-buttons" style="margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <button class="btn btn-secondary" onclick="window.paperManager.exportBibtex(${paper.id})">
                         <i class="fas fa-download"></i> Export BibTeX
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.paperManager.organizePdf(${paper.id})" title="Rename PDF to: Author - Year - Title.pdf">
+                        <i class="fas fa-file-signature"></i> Organize PDF Name
                     </button>
                 </div>
                 
@@ -1997,6 +2000,31 @@ class PaperManager {
         } catch (error) {
             console.error('Error exporting BibTeX:', error);
             UIComponents.showNotification('Failed to export BibTeX', 'error');
+        }
+    }
+    
+    async organizePdf(paperId) {
+        try {
+            UIComponents.showNotification('Organizing PDF filename...', 'info');
+            
+            const result = await API.request(`/api/papers/${paperId}/organize-pdf`, {
+                method: 'POST'
+            });
+            
+            if (result.success) {
+                UIComponents.showNotification(
+                    `PDF renamed to: ${result.filename}`,
+                    'success',
+                    5000
+                );
+                
+                // Refresh the paper details to show updated info
+                await this.showPaperDetails(paperId);
+            }
+        } catch (error) {
+            console.error('Error organizing PDF:', error);
+            const message = error.message || 'Failed to organize PDF filename';
+            UIComponents.showNotification(message, 'error');
         }
     }
 }
