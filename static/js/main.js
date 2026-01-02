@@ -1966,7 +1966,7 @@ class PaperManager {
     async exportBibtex(paperId) {
         try {
             // Fetch BibTeX from server
-            const response = await API.request(`/papers/${paperId}/bibtex`);
+            const response = await API.request(`/api/papers/${paperId}/bibtex`);
             
             if (response.ok) {
                 const bibtexContent = await response.text();
@@ -1978,6 +1978,19 @@ class PaperManager {
                 a.href = url;
                 a.download = `paper_${paperId}.bib`;
                 document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                UIComponents.showNotification('BibTeX exported successfully', 'success');
+            } else {
+                throw new Error('Failed to export BibTeX');
+            }
+        } catch (error) {
+            console.error('Error exporting BibTeX:', error);
+            UIComponents.showNotification('Failed to export BibTeX', 'error');
+        }
+    }
                 a.click();
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
