@@ -31,6 +31,8 @@ Johnson - Unknown - Machine Learning Applications.pdf
 
 ## When Files Are Renamed
 
+### Automatic Renaming
+
 Files are automatically renamed when:
 
 1. ✅ Metadata extraction completes successfully (`extraction_status = "completed"`)
@@ -38,6 +40,20 @@ Files are automatically renamed when:
 3. ✅ At least the title is available in the metadata
 
 If any of these conditions are not met, the original filename is preserved.
+
+### Manual Renaming
+
+You can also manually trigger PDF organization at any time:
+
+1. Open the paper details view
+2. Click the **"Organize PDF Name"** button next to "Export BibTeX"
+3. The PDF will be renamed immediately using the current metadata
+
+This is useful for:
+- Papers uploaded before the auto-organization feature was added
+- Papers that didn't meet the confidence threshold initially
+- Papers where metadata was manually edited
+- Any paper where you want to standardize the filename
 
 ## Implementation Details
 
@@ -82,12 +98,20 @@ The system handles different author formats:
 
 ## Code Location
 
-The feature is implemented in [`app/ai/tasks.py`](../app/ai/tasks.py):
+The feature is implemented across:
 
+**Backend ([`app/ai/tasks.py`](../app/ai/tasks.py)):**
 - `sanitize_filename()`: Cleans text for use in filenames
 - `generate_organized_filename()`: Creates the new filename from metadata
-- `organize_pdf_file()`: Performs the actual file renaming
+- `organize_pdf_file()`: Performs the actual file system rename operation
 - `update_paper_extraction_results()`: Calls organization after successful extraction
+
+**API ([`app/api/papers.py`](../app/api/papers.py)):**
+- `POST /api/papers/{id}/organize-pdf`: Manual rename endpoint
+
+**Frontend ([`static/js/main.js`](../static/js/main.js)):**
+- `organizePdf()`: Calls the API and updates UI
+- Button in paper details view
 
 ## Testing
 
@@ -140,20 +164,29 @@ Potential improvements:
 
 ## Troubleshooting
 
-**Q: My PDF wasn't renamed. Why?**
+**Q: My PDF wasn't renamed automatically. Why?**
 
 A: Check the logs. The most common reasons are:
 - Extraction confidence < 70%
 - Missing title in metadata
 - Extraction failed or incomplete
 
+Use the manual "Organize PDF Name" button in the paper details to rename it anyway.
+
 **Q: Can I change the naming format?**
 
 A: Yes, modify the `generate_organized_filename()` function in `app/ai/tasks.py`. Update the filename construction around line 98.
 
-**Q: What if I want to rename existing PDFs?**
+**Q: The manual button says it failed. Why?**
 
-A: Currently, the feature only renames PDFs during new extractions. To rename existing files, you would need to trigger a re-extraction or create a migration script.
+A: The paper must have at least a title to be renamed. Check that:
+- The paper has a title field filled in
+- The PDF file exists in the uploads directory
+- You have write permissions on the uploads directory
+
+**Q: What if I want to rename existing PDFs in bulk?**
+
+A: You can use the manual button on each paper, or create a script to call the `/api/papers/{id}/organize-pdf` endpoint for all papers.
 
 **Q: Are the original filenames preserved anywhere?**
 
