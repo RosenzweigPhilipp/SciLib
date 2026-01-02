@@ -469,6 +469,7 @@ class PaperManager {
         this.totalPapers = 0;
         this.activeSummaryTasks = new Set(); // Track papers with active summary generation
         this.currentDiscoveryResults = []; // Store current discovery results
+        this.discoveryVisibleCount = 3; // Number of discovery results to show initially
         this.setupPaperHandlers();
     }
 
@@ -1071,64 +1072,12 @@ class PaperManager {
                 return;
             }
             
-            // Display results
-            let html = `
-                <div class="discovery-results-header">
-                    <span class="results-count">Found ${results.total_results} papers</span>
-                </div>
-                <div class="discovery-results-list">
-            `;
-            
-            results.papers.forEach((paper, idx) => {
-                const inLibrary = paper.in_library;
-                const statusBadge = inLibrary 
-                    ? '<span class="badge badge-success"><i class="fas fa-check"></i> In Library</span>'
-                    : '';
-                
-                html += `
-                    <div class="discovery-result-item">
-                        <div class="discovery-result-header">
-                            <span class="result-number">#${idx + 1}</span>
-                            <span class="result-source badge badge-info">${paper.source}</span>
-                            ${statusBadge}
-                        </div>
-                        <div class="discovery-result-title">${Utils.sanitizeHtml(paper.title)}</div>
-                        <div class="discovery-result-authors">${Utils.sanitizeHtml(paper.authors || 'Unknown authors')}</div>
-                        <div class="discovery-result-meta">
-                            ${paper.year ? `<span><i class="fas fa-calendar"></i> ${paper.year}</span>` : ''}
-                            ${paper.citation_count ? `<span><i class="fas fa-quote-right"></i> ${paper.citation_count} citations</span>` : ''}
-                            ${paper.journal ? `<span><i class="fas fa-book"></i> ${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
-                        </div>
-                        ${paper.abstract ? `
-                            <div class="discovery-result-abstract">
-                                ${Utils.sanitizeHtml(paper.abstract.substring(0, 200))}${paper.abstract.length > 200 ? '...' : ''}
-                            </div>
-                        ` : ''}
-                        <div class="discovery-result-actions">
-                            ${!inLibrary ? `
-                                <button class="btn btn-sm btn-primary" onclick="window.paperManager.addDiscoveredPaper(${paperId}, ${idx})">
-                                    <i class="fas fa-plus"></i> Add to Library
-                                </button>
-                            ` : `
-                                <button class="btn btn-sm btn-secondary" onclick="window.paperManager.showPaperDetails(${paper.library_paper_id})">
-                                    <i class="fas fa-eye"></i> View in Library
-                                </button>
-                            `}
-                            ${paper.url ? `
-                                <a href="${paper.url}" target="_blank" class="btn btn-sm btn-secondary">
-                                    <i class="fas fa-external-link-alt"></i> View Original
-                                </a>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            resultsContainer.innerHTML = html;
-            
             // Store results for later use
             this.currentDiscoveryResults = results.papers;
+            this.discoveryVisibleCount = 3; // Initially show 3 papers
+            
+            // Render the results
+            this.renderDiscoveryResults(paperId, resultsContainer, results.total_results);
             
         } catch (error) {
             console.error('Error discovering similar papers:', error);
@@ -1139,6 +1088,92 @@ class PaperManager {
             `;
             UIComponents.showNotification('Failed to discover papers', 'error');
         }
+    }
+    
+    renderDiscoveryResults(paperId, container, totalResults) {
+        const papers = this.currentDiscoveryResults;
+        const visibleCount = this.discoveryVisibleCount;
+        
+        // Display results header
+        let html = `
+            <div class="discovery-results-header">
+                <span class="results-count">Found ${totalResults} papers</span>
+            </div>
+            <div class="discovery-results-list">
+        `;
+        
+        // Show only visible count
+        papers.slice(0, visibleCount).forEach((paper, idx) => {
+            const inLibrary = paper.in_library;
+            const statusBadge = inLibrary 
+                ? '<span class="badge badge-success"><i class="fas fa-check"></i> In Library</span>'
+                : '';
+            
+            html += `
+                <div class="discovery-result-item">
+                    <div class="discovery-result-header">
+                        <span class="result-number">#${idx + 1}</span>
+                        <span class="result-source badge badge-info">${paper.source}</span>
+                        ${statusBadge}
+                    </div>
+                    <div class="discovery-result-title">${Utils.sanitizeHtml(paper.title)}</div>
+                    <div class="discovery-result-authors">${Utils.sanitizeHtml(paper.authors || 'Unknown authors')}</div>
+                    <div class="discovery-result-meta">
+                        ${paper.year ? `<span><i class="fas fa-calendar"></i> ${paper.year}</span>` : ''}
+                        ${paper.citation_count ? `<span><i class="fas fa-quote-right"></i> ${paper.citation_count} citations</span>` : ''}
+                        ${paper.journal ? `<span><i class="fas fa-book"></i> ${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
+                    </div>
+                    ${paper.abstract ? `
+                        <div class="discovery-result-abstract">
+                            ${Utils.sanitizeHtml(paper.abstract.substring(0, 200))}${paper.abstract.length > 200 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                    <div class="discovery-result-actions">
+                        ${!inLibrary ? `
+                            <button class="btn btn-sm btn-primary" onclick="window.paperManager.addDiscoveredPaper(${paperId}, ${idx})">
+                                <i class="fas fa-plus"></i> Add to Library
+                            </button>
+                        ` : `
+                            <button class="btn btn-sm btn-secondary" onclick="window.paperManager.showPaperDetails(${paper.library_paper_id})">
+                                <i class="fas fa-eye"></i> View in Library
+                            </button>
+                        `}
+                        ${paper.url ? `
+                            <a href="${paper.url}" target="_blank" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-external-link-alt"></i> View Original
+                            </a>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        // Add "Show More" button if there are more results
+        if (visibleCount < papers.length) {
+            const remaining = papers.length - visibleCount;
+            html += `
+                <div class="discovery-show-more">
+                    <button class="btn btn-secondary" onclick="window.paperManager.showMoreDiscoveryResults(${paperId})">
+                        <i class="fas fa-chevron-down"></i> Show ${remaining} More ${remaining === 1 ? 'Paper' : 'Papers'}
+                    </button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    showMoreDiscoveryResults(paperId) {
+        const container = document.getElementById('discovery-results');
+        if (!container) return;
+        
+        // Increase visible count by 3
+        this.discoveryVisibleCount += 3;
+        
+        // Re-render with new count
+        this.renderDiscoveryResults(paperId, container, this.currentDiscoveryResults.length);
     }
     
     async addDiscoveredPaper(currentPaperId, resultIndex) {
