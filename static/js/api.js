@@ -178,11 +178,11 @@ class API {
         
         // External Discovery (discover API)
         async discoverPapers(query, limit = 10) {
-            return API.request(`/discover/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+            return API.request(`/api/discover/search?query=${encodeURIComponent(query)}&limit=${limit}`);
         },
         
         async addDiscoveredPaper(paperData) {
-            return API.request('/discover/add', {
+            return API.request('/api/discover/add', {
                 method: 'POST',
                 body: JSON.stringify(paperData)
             });
