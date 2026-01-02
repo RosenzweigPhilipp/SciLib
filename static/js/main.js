@@ -2007,7 +2007,7 @@ class PaperManager {
         try {
             UIComponents.showNotification('Organizing PDF filename...', 'info');
             
-            const result = await API.request(`/api/papers/${paperId}/organize-pdf`, {
+            const result = await API.request(`/papers/${paperId}/organize-pdf`, {
                 method: 'POST'
             });
             
