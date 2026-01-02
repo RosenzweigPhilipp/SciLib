@@ -71,15 +71,21 @@ class CrossRefTool:
                         authors.append(f"{given} {family}".strip())
                 fields["authors"] = "; ".join(authors)
             
-            # Year
+            # Year and month
             if "published" in crossref_data:
                 date_parts = crossref_data["published"].get("date-parts", [[]])[0]
                 if date_parts:
                     fields["year"] = date_parts[0]
+                    if len(date_parts) > 1:
+                        fields["month"] = date_parts[1]
             
-            # Journal
+            # Journal/Container
             if "container-title" in crossref_data and crossref_data["container-title"]:
-                fields["journal"] = crossref_data["container-title"][0]
+                container = crossref_data["container-title"][0]
+                fields["journal"] = container
+                # For conference papers, this is booktitle
+                if crossref_data.get("type") in ["proceedings-article", "paper-conference"]:
+                    fields["booktitle"] = container
             
             # DOI
             if "DOI" in crossref_data:
@@ -87,9 +93,9 @@ class CrossRefTool:
             
             # Volume/Issue/Pages
             if "volume" in crossref_data:
-                fields["volume"] = crossref_data["volume"]
+                fields["volume"] = str(crossref_data["volume"])
             if "issue" in crossref_data:
-                fields["number"] = crossref_data["issue"]
+                fields["issue"] = str(crossref_data["issue"])
             if "page" in crossref_data:
                 fields["pages"] = crossref_data["page"]
             
@@ -100,6 +106,34 @@ class CrossRefTool:
             # Publisher
             if "publisher" in crossref_data:
                 fields["publisher"] = crossref_data["publisher"]
+            
+            # URL
+            if "URL" in crossref_data:
+                fields["url"] = crossref_data["URL"]
+            elif "DOI" in crossref_data:
+                fields["url"] = f"https://doi.org/{crossref_data['DOI']}"
+            
+            # ISBN (for books)
+            if "ISBN" in crossref_data and crossref_data["ISBN"]:
+                fields["isbn"] = crossref_data["ISBN"][0]
+            
+            # Edition (for books)
+            if "edition-number" in crossref_data:
+                fields["edition"] = str(crossref_data["edition-number"])
+            
+            # Publication type
+            if "type" in crossref_data:
+                pub_type = crossref_data["type"]
+                # Map CrossRef types to BibTeX types
+                type_map = {
+                    "journal-article": "article",
+                    "proceedings-article": "inproceedings",
+                    "paper-conference": "inproceedings",
+                    "book": "book",
+                    "book-chapter": "inbook",
+                    "monograph": "book"
+                }
+                fields["publication_type"] = type_map.get(pub_type, "article")
             
         except Exception as e:
             logger.error(f"Failed to extract BibTeX fields: {e}")
@@ -164,6 +198,14 @@ class ArxivTool:
                 date_str = published.text
                 if date_str:
                     paper["year"] = int(date_str[:4])
+                    # Extract month from publication date
+                    if len(date_str) >= 7:
+                        try:
+                            from datetime import datetime
+                            date = datetime.fromisoformat(date_str[:10])
+                            paper["month"] = date.month
+                        except:
+                            pass
             
             if summary is not None:
                 paper["abstract"] = summary.text.strip()
@@ -175,6 +217,12 @@ class ArxivTool:
             
             # ArXiv papers are preprints
             paper["journal"] = "arXiv preprint"
+            paper["publication_type"] = "article"
+            
+            # Extract arXiv category for note field
+            category = entry.find('{http://www.w3.org/2005/Atom}category')
+            if category is not None and "term" in category.attrib:
+                paper["note"] = f"arXiv:{category.attrib['term']}"
             
             return paper
             
@@ -319,23 +367,51 @@ class SemanticScholarTool:
             if "abstract" in s2_data:
                 fields["abstract"] = s2_data["abstract"]
             
-            # Handle both venue and journal
+            # Handle venue (could be journal or conference)
             if "venue" in s2_data and s2_data["venue"]:
-                fields["journal"] = s2_data["venue"]
+                venue = s2_data["venue"]
+                fields["journal"] = venue
+                # Try to detect if it's a conference
+                if any(word in venue.lower() for word in ["conference", "proceedings", "workshop", "symposium"]):
+                    fields["booktitle"] = venue
+                    fields["publication_type"] = "inproceedings"
+                else:
+                    fields["publication_type"] = "article"
             elif "journal" in s2_data and s2_data["journal"]:
-                fields["journal"] = s2_data["journal"].get("name", "") if isinstance(s2_data["journal"], dict) else s2_data["journal"]
+                journal = s2_data["journal"].get("name", "") if isinstance(s2_data["journal"], dict) else s2_data["journal"]
+                fields["journal"] = journal
+                fields["publication_type"] = "article"
+                # Extract volume/pages from journal dict
+                if isinstance(s2_data["journal"], dict):
+                    if "volume" in s2_data["journal"]:
+                        fields["volume"] = str(s2_data["journal"]["volume"])
+                    if "pages" in s2_data["journal"]:
+                        fields["pages"] = s2_data["journal"]["pages"]
             
-            # Extract DOI from external IDs
+            # Extract DOI and other external IDs
             if "externalIds" in s2_data and s2_data["externalIds"]:
                 external_ids = s2_data["externalIds"]
                 if "DOI" in external_ids:
                     fields["doi"] = external_ids["DOI"]
                 if "ArXiv" in external_ids:
                     fields["arxiv_id"] = external_ids["ArXiv"]
+                if "ISBN" in external_ids:
+                    fields["isbn"] = external_ids["ISBN"]
             
             # URL
             if "url" in s2_data:
                 fields["url"] = s2_data["url"]
+            elif fields.get("doi"):
+                fields["url"] = f"https://doi.org/{fields['doi']}"
+            
+            # Publication date for month
+            if "publicationDate" in s2_data and s2_data["publicationDate"]:
+                try:
+                    from datetime import datetime
+                    date = datetime.fromisoformat(s2_data["publicationDate"].replace("Z", "+00:00"))
+                    fields["month"] = date.month
+                except:
+                    pass
             
             # Citation count (for confidence scoring)
             if "citationCount" in s2_data:
@@ -415,9 +491,17 @@ class OpenAlexTool:
                 if authors:
                     fields["authors"] = "; ".join(authors)
             
-            # Year
+            # Year and publication date
             if "publication_year" in openalex_data and openalex_data["publication_year"]:
                 fields["year"] = openalex_data["publication_year"]
+            
+            if "publication_date" in openalex_data and openalex_data["publication_date"]:
+                try:
+                    from datetime import datetime
+                    date = datetime.fromisoformat(openalex_data["publication_date"])
+                    fields["month"] = date.month
+                except:
+                    pass
             
             # Abstract (OpenAlex stores as inverted index)
             if "abstract_inverted_index" in openalex_data and openalex_data["abstract_inverted_index"]:
@@ -425,33 +509,60 @@ class OpenAlexTool:
                 if abstract:
                     fields["abstract"] = abstract
             
-            # Journal/Venue
+            # Journal/Venue and Publisher
             if "primary_location" in openalex_data and openalex_data["primary_location"]:
                 location = openalex_data["primary_location"]
                 source = location.get("source", {})
-                if source and source.get("display_name"):
-                    fields["journal"] = source["display_name"]
+                if source:
+                    if source.get("display_name"):
+                        venue_name = source["display_name"]
+                        fields["journal"] = venue_name
+                        # Detect conference papers
+                        if source.get("type") == "conference" or any(word in venue_name.lower() for word in ["conference", "proceedings", "workshop"]):
+                            fields["booktitle"] = venue_name
+                            fields["publication_type"] = "inproceedings"
+                        else:
+                            fields["publication_type"] = "article"
+                    # Publisher
+                    if source.get("host_organization_name"):
+                        fields["publisher"] = source["host_organization_name"]
             
             # DOI
             if "doi" in openalex_data and openalex_data["doi"]:
                 # OpenAlex DOI comes as URL, extract just the DOI
                 doi_url = openalex_data["doi"]
-                fields["doi"] = doi_url.replace("https://doi.org/", "")
+                doi = doi_url.replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
+                fields["doi"] = doi
+                # Construct DOI URL
+                if not fields.get("url"):
+                    fields["url"] = f"https://doi.org/{doi}"
             
             # Volume, Issue, Pages from biblio
             if "biblio" in openalex_data and openalex_data["biblio"]:
                 biblio = openalex_data["biblio"]
                 if biblio.get("volume"):
-                    fields["volume"] = biblio["volume"]
+                    fields["volume"] = str(biblio["volume"])
                 if biblio.get("issue"):
-                    fields["number"] = biblio["issue"]
+                    fields["issue"] = str(biblio["issue"])
                 if biblio.get("first_page") and biblio.get("last_page"):
                     fields["pages"] = f"{biblio['first_page']}-{biblio['last_page']}"
                 elif biblio.get("first_page"):
-                    fields["pages"] = biblio["first_page"]
+                    fields["pages"] = str(biblio["first_page"])
             
-            # URL - use OpenAlex ID as URL
-            if "id" in openalex_data:
+            # Publication type from OpenAlex type
+            if "type" in openalex_data:
+                type_map = {
+                    "article": "article",
+                    "book": "book",
+                    "book-chapter": "inbook",
+                    "proceedings-article": "inproceedings",
+                    "dissertation": "phdthesis"
+                }
+                if openalex_data["type"] in type_map and not fields.get("publication_type"):
+                    fields["publication_type"] = type_map[openalex_data["type"]]
+            
+            # URL - use OpenAlex ID if no DOI URL
+            if not fields.get("url") and "id" in openalex_data:
                 fields["url"] = openalex_data["id"]
             
             # Citation count (for confidence scoring)

@@ -807,6 +807,49 @@ def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
                 logger.info(f"Summary generation result: {summaries}")
                 
                 if "error" not in summaries:
+                    # Enrich metadata while LLM has knowledge of the paper
+                    try:
+                        from .agents.metadata_enrichment import enrich_metadata_with_llm
+                        
+                        existing_metadata = {
+                            "title": paper.title,
+                            "authors": paper.authors,
+                            "year": paper.year,
+                            "journal": paper.journal,
+                            "doi": paper.doi,
+                            "abstract": paper.abstract,
+                            "publisher": paper.publisher,
+                            "volume": paper.volume,
+                            "issue": paper.issue,
+                            "pages": paper.pages,
+                            "booktitle": paper.booktitle,
+                            "isbn": paper.isbn,
+                            "url": paper.url,
+                            "month": paper.month,
+                            "publication_type": paper.publication_type
+                        }
+                        
+                        logger.info(f"Enriching metadata for paper {paper_id}")
+                        enriched_fields = service.run_async(
+                            enrich_metadata_with_llm(
+                                existing_metadata,
+                                os.getenv("OPENAI_API_KEY")
+                            )
+                        )
+                        
+                        if enriched_fields:
+                            logger.info(f"Enriched {len(enriched_fields)} fields: {list(enriched_fields.keys())}")
+                            # Apply enriched fields to paper
+                            for field, value in enriched_fields.items():
+                                if hasattr(paper, field):
+                                    setattr(paper, field, value)
+                        else:
+                            logger.info("No additional metadata enrichment available")
+                    
+                    except Exception as enrich_error:
+                        logger.warning(f"Metadata enrichment failed for paper {paper_id}: {enrich_error}")
+                        # Don't fail the whole task if enrichment fails
+                    
                     # Save to database
                     short = summaries.get("short_summary")
                     long = summaries.get("long_summary")

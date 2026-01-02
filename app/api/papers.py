@@ -597,3 +597,127 @@ def refresh_paper_recommendations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to refresh recommendations: {str(e)}"
         )
+
+
+@router.get("/{paper_id}/bibtex")
+async def get_paper_bibtex(
+    paper_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Export paper metadata as BibTeX entry.
+    
+    Returns a properly formatted BibTeX entry with all available metadata fields.
+    """
+    from fastapi.responses import PlainTextResponse
+    
+    # Get paper
+    paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+    if not paper:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paper not found"
+        )
+    
+    # Generate BibTeX citation key (author_year_keyword format)
+    def generate_cite_key(paper):
+        # Get first author's last name
+        author_key = "unknown"
+        if paper.authors:
+            authors_list = paper.authors.split(";")[0].strip()
+            if authors_list:
+                # Get last name (assuming "First Last" or "Last, First" format)
+                if "," in authors_list:
+                    author_key = authors_list.split(",")[0].strip()
+                else:
+                    parts = authors_list.split()
+                    author_key = parts[-1] if parts else "unknown"
+                # Clean non-alphanumeric
+                author_key = "".join(c for c in author_key if c.isalnum())
+        
+        # Get year
+        year_key = str(paper.year) if paper.year else "nodate"
+        
+        # Get first significant word from title
+        title_key = "paper"
+        if paper.title:
+            title_words = paper.title.lower().split()
+            # Skip common words
+            skip_words = {"the", "a", "an", "of", "in", "on", "for", "to", "and", "or", "with"}
+            for word in title_words:
+                clean_word = "".join(c for c in word if c.isalnum())
+                if clean_word and clean_word not in skip_words and len(clean_word) > 3:
+                    title_key = clean_word[:10]
+                    break
+        
+        return f"{author_key}{year_key}{title_key}"
+    
+    cite_key = generate_cite_key(paper)
+    
+    # Determine BibTeX entry type
+    entry_type = paper.publication_type if paper.publication_type else "article"
+    
+    # Build BibTeX entry
+    bibtex_lines = [f"@{entry_type}{{{cite_key},"]
+    
+    # Add required and optional fields
+    def add_field(key, value, required=False):
+        if value or required:
+            # Escape special LaTeX characters
+            if value:
+                value_str = str(value).replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}")
+                # For title, wrap in double braces to preserve capitalization
+                if key == "title":
+                    bibtex_lines.append(f"  {key} = {{{{{value_str}}}}},")
+                elif key in ["volume", "issue", "year", "month"]:
+                    # Numeric fields don't need braces
+                    bibtex_lines.append(f"  {key} = {value_str},")
+                else:
+                    bibtex_lines.append(f"  {key} = {{{value_str}}},")
+            elif required:
+                bibtex_lines.append(f"  {key} = {{}},")
+    
+    # Add fields in standard BibTeX order
+    add_field("title", paper.title, required=True)
+    add_field("author", paper.authors.replace(";", " and ") if paper.authors else None, required=True)
+    add_field("year", paper.year)
+    add_field("month", paper.month)
+    
+    # Entry-specific fields
+    if entry_type == "article":
+        add_field("journal", paper.journal)
+        add_field("volume", paper.volume)
+        add_field("number", paper.issue)  # BibTeX uses "number" for issue
+        add_field("pages", paper.pages)
+        add_field("publisher", paper.publisher)
+    elif entry_type in ["inproceedings", "conference"]:
+        add_field("booktitle", paper.booktitle or paper.journal)
+        add_field("pages", paper.pages)
+        add_field("publisher", paper.publisher)
+        add_field("series", paper.series)
+    elif entry_type in ["book", "inbook"]:
+        add_field("publisher", paper.publisher)
+        add_field("edition", paper.edition)
+        add_field("isbn", paper.isbn)
+        add_field("series", paper.series)
+    
+    # Common optional fields
+    add_field("doi", paper.doi)
+    add_field("url", paper.url)
+    add_field("abstract", paper.abstract)
+    add_field("keywords", paper.keywords)
+    add_field("note", paper.note)
+    
+    # Close entry
+    bibtex_lines[-1] = bibtex_lines[-1].rstrip(",")  # Remove trailing comma from last field
+    bibtex_lines.append("}")
+    
+    bibtex_content = "\n".join(bibtex_lines)
+    
+    return PlainTextResponse(
+        content=bibtex_content,
+        media_type="application/x-bibtex",
+        headers={
+            "Content-Disposition": f'attachment; filename="{cite_key}.bib"'
+        }
+    )

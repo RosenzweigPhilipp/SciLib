@@ -36,6 +36,20 @@ class Paper(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
+    # BibTeX/Citation fields (for proper academic citations)
+    publisher = Column(String(255))           # Publisher name
+    volume = Column(String(50))               # Journal volume
+    issue = Column(String(50))                # Journal issue/number
+    pages = Column(String(50))                # Page range (e.g., "123-145")
+    booktitle = Column(String(500))           # Conference/book title
+    series = Column(String(255))              # Series name
+    edition = Column(String(50))              # Edition (for books)
+    isbn = Column(String(50))                 # ISBN (for books)
+    url = Column(String(500))                 # Canonical URL
+    month = Column(Integer)                   # Publication month (1-12)
+    note = Column(Text)                       # Additional notes
+    publication_type = Column(String(50))     # article, inproceedings, book, etc.
+    
     # AI Extraction fields
     extraction_status = Column(String(50), default="pending", index=True)  # pending, processing, completed, failed
     extraction_confidence = Column(Float, default=0.0)  # 0.0 to 1.0

@@ -712,9 +712,20 @@ class PaperManager {
                 <div class="paper-meta-grid">
                     ${paper.year ? `<div class="meta-item"><label>Year</label><value>${paper.year}</value></div>` : ''}
                     ${paper.journal ? `<div class="meta-item"><label>Journal</label><value>${Utils.sanitizeHtml(paper.journal)}</value></div>` : ''}
+                    ${paper.publisher ? `<div class="meta-item"><label>Publisher</label><value>${Utils.sanitizeHtml(paper.publisher)}</value></div>` : ''}
+                    ${paper.volume ? `<div class="meta-item"><label>Volume</label><value>${paper.volume}</value></div>` : ''}
+                    ${paper.issue ? `<div class="meta-item"><label>Issue</label><value>${paper.issue}</value></div>` : ''}
+                    ${paper.pages ? `<div class="meta-item"><label>Pages</label><value>${paper.pages}</value></div>` : ''}
+                    ${paper.booktitle ? `<div class="meta-item"><label>Conference</label><value>${Utils.sanitizeHtml(paper.booktitle)}</value></div>` : ''}
                     ${paper.doi ? `<div class="meta-item"><label>DOI</label><value>${Utils.sanitizeHtml(paper.doi)}</value></div>` : ''}
                     <div class="meta-item"><label>Uploaded</label><value>${Utils.formatDate(paper.created_at)}</value></div>
                     ${paper.extracted_at ? `<div class="meta-item"><label>AI Extracted</label><value>${Utils.formatDate(paper.extracted_at)}</value></div>` : ''}
+                </div>
+                
+                <div class="action-buttons" style="margin: 1rem 0; display: flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="window.paperManager.exportBibtex(${paper.id})">
+                        <i class="fas fa-download"></i> Export BibTeX
+                    </button>
                 </div>
                 
                 ${aiInfo}
@@ -1930,7 +1941,37 @@ class PaperManager {
             UIComponents.showNotification('Failed to delete paper', 'error');
         }
     }
+
+    async exportBibtex(paperId) {
+        try {
+            // Fetch BibTeX from server
+            const response = await API.request(`/papers/${paperId}/bibtex`);
+            
+            if (response.ok) {
+                const bibtexContent = await response.text();
+                
+                // Create download
+                const blob = new Blob([bibtexContent], { type: 'application/x-bibtex' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `paper_${paperId}.bib`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                UIComponents.showNotification('BibTeX exported successfully', 'success');
+            } else {
+                throw new Error('Failed to export BibTeX');
+            }
+        } catch (error) {
+            console.error('Error exporting BibTeX:', error);
+            UIComponents.showNotification('Failed to export BibTeX', 'error');
+        }
+    }
 }
+
 
 // Collection Manager
 class CollectionManager {

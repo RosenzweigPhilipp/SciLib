@@ -627,7 +627,7 @@ If information is not clearly available, use null for that field."""
             debug_log(f"  Database search error: {str(e)[:60]}", Colors.FAIL)
         
         # Fallback to Exa web search if no good results
-        if not any(search_results[key] for key in ["crossref", "arxiv", "semantic_scholar", "semantic_scholar_match"]):
+        if not any(search_results[key] for key in ["crossref", "arxiv", "semantic_scholar", "semantic_scholar_match", "openalex"]):
             debug_log("  No API results - trying Exa fallback...", Colors.WARNING)
             if self.exa_tool and title:
                 try:
@@ -822,7 +822,19 @@ If information is not clearly available, use null for that field."""
             "doi": llm_metadata.get("doi"),
             "keywords": llm_metadata.get("keywords"),
             "url": None,
-            "bibtex_type": "article"
+            "bibtex_type": "article",
+            # Extended BibTeX fields
+            "publisher": llm_metadata.get("publisher"),
+            "volume": llm_metadata.get("volume"),
+            "issue": llm_metadata.get("issue"),
+            "pages": llm_metadata.get("pages"),
+            "booktitle": llm_metadata.get("booktitle"),
+            "series": llm_metadata.get("series"),
+            "edition": llm_metadata.get("edition"),
+            "isbn": llm_metadata.get("isbn"),
+            "month": llm_metadata.get("month"),
+            "note": llm_metadata.get("note"),
+            "publication_type": llm_metadata.get("publication_type")
         }
         
         # Collect all source data for validation
@@ -873,12 +885,19 @@ If information is not clearly available, use null for that field."""
         
         # Merge fields with source priority
         debug_log("  Merging metadata fields...", Colors.OKBLUE)
+        
+        # Define all fields to merge (basic + extended BibTeX)
+        basic_fields = ["authors", "abstract", "year", "journal", "doi", "url", "keywords"]
+        extended_fields = ["publisher", "volume", "issue", "pages", "booktitle", "series", 
+                          "edition", "isbn", "month", "note", "publication_type"]
+        all_fields = basic_fields + extended_fields
+        
         for source in all_sources:
             source_data = source["data"]
             source_name = source["name"]
             
             # For each field, prefer high-quality sources
-            for field in ["authors", "abstract", "year", "journal", "doi", "url", "keywords"]:
+            for field in all_fields:
                 source_value = self._extract_field_from_source(source_data, field)
                 
                 if source_value and not merged.get(field):
