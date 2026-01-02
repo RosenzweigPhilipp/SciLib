@@ -1965,8 +1965,14 @@ class PaperManager {
 
     async exportBibtex(paperId) {
         try {
-            // Fetch BibTeX from server
-            const response = await API.request(`/api/papers/${paperId}/bibtex`);
+            // Use fetch directly for text response (not JSON)
+            const apiKey = ApiKeyManager.getApiKey();
+            const response = await fetch(`/api/papers/${paperId}/bibtex`, {
+                method: 'GET',
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            });
             
             if (response.ok) {
                 const bibtexContent = await response.text();
@@ -1984,19 +1990,8 @@ class PaperManager {
                 
                 UIComponents.showNotification('BibTeX exported successfully', 'success');
             } else {
-                throw new Error('Failed to export BibTeX');
-            }
-        } catch (error) {
-            console.error('Error exporting BibTeX:', error);
-            UIComponents.showNotification('Failed to export BibTeX', 'error');
-        }
-    }
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                UIComponents.showNotification('BibTeX exported successfully', 'success');
-            } else {
+                const errorText = await response.text();
+                console.error('BibTeX export failed:', errorText);
                 throw new Error('Failed to export BibTeX');
             }
         } catch (error) {

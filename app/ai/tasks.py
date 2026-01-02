@@ -337,6 +337,13 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
                 # Update journal if not set
                 if metadata.get("journal") and not paper.journal:
                     paper.journal = metadata["journal"]
+                
+                # Update extended BibTeX fields
+                bibtex_fields = ["publisher", "volume", "issue", "pages", "booktitle", 
+                                "series", "edition", "isbn", "url", "month", "note", "publication_type"]
+                for field in bibtex_fields:
+                    if metadata.get(field) and not getattr(paper, field, None):
+                        setattr(paper, field, metadata[field])
             
             # Commit changes
             db.commit()
