@@ -2,7 +2,10 @@
 Celery tasks for background AI metadata extraction.
 """
 import os
-from typing import Dict, Any
+import re
+import shutil
+from pathlib import Path
+from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
 
@@ -49,6 +52,163 @@ if Celery:
     )
 else:
     celery_app = None
+
+
+def sanitize_filename(text: str, max_length: int = 100) -> str:
+    """
+    Sanitize text for use in filenames.
+    
+    Args:
+        text: Text to sanitize
+        max_length: Maximum length for the filename component
+        
+    Returns:
+        Sanitized filename-safe string
+    """
+    if not text:
+        return "Unknown"
+    
+    # Remove or replace invalid filename characters
+    # Keep alphanumeric, spaces, hyphens, and underscores
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '', str(text))
+    
+    # Replace multiple spaces with single space
+    sanitized = re.sub(r'\s+', ' ', sanitized)
+    
+    # Trim and limit length
+    sanitized = sanitized.strip()[:max_length]
+    
+    return sanitized if sanitized else "Unknown"
+
+
+def generate_organized_filename(metadata: Dict[str, Any]) -> Optional[str]:
+    """
+    Generate organized filename from metadata: {author} - {year} - {title}.pdf
+    If multiple authors, use "First Author et al."
+    
+    Args:
+        metadata: Extracted metadata dictionary
+        
+    Returns:
+        Organized filename or None if required fields are missing
+    """
+    try:
+        # Extract required fields
+        title = metadata.get("title")
+        year = metadata.get("year")
+        authors = metadata.get("authors")
+        
+        # Check if we have minimum required info
+        if not title:
+            logger.info("Cannot organize PDF: missing title")
+            return None
+        
+        # Process author(s)
+        author_part = "Unknown Author"
+        if authors:
+            if isinstance(authors, list) and len(authors) > 0:
+                # Get first author
+                first_author = authors[0]
+                if isinstance(first_author, dict):
+                    # Structured author format
+                    family = first_author.get("family", "")
+                    given = first_author.get("given", "")
+                    author_name = family if family else f"{given} {family}".strip()
+                else:
+                    # Simple string format
+                    author_name = str(first_author).split(',')[0].strip()
+                
+                # Add "et al." if multiple authors
+                if len(authors) > 1:
+                    author_part = f"{author_name} et al"
+                else:
+                    author_part = author_name
+            elif isinstance(authors, str):
+                # String format like "Author1, Author2"
+                author_list = authors.split(',')
+                author_part = author_list[0].strip()
+                if len(author_list) > 1:
+                    author_part += " et al"
+        
+        # Process year
+        year_part = ""
+        if year:
+            # Extract 4-digit year if present
+            year_match = re.search(r'\d{4}', str(year))
+            if year_match:
+                year_part = year_match.group()
+        
+        if not year_part:
+            year_part = "Unknown"
+        
+        # Sanitize components
+        author_part = sanitize_filename(author_part, max_length=50)
+        year_part = sanitize_filename(year_part, max_length=20)
+        title_part = sanitize_filename(title, max_length=100)
+        
+        # Construct filename
+        filename = f"{author_part} - {year_part} - {title_part}.pdf"
+        
+        logger.info(f"Generated organized filename: {filename}")
+        return filename
+        
+    except Exception as e:
+        logger.error(f"Error generating organized filename: {e}")
+        return None
+
+
+def organize_pdf_file(paper_id: int, current_path: str, metadata: Dict[str, Any]) -> Optional[str]:
+    """
+    Rename and organize PDF file based on metadata.
+    
+    Args:
+        paper_id: Database ID of the paper
+        current_path: Current path of the PDF file
+        metadata: Extracted metadata
+        
+    Returns:
+        New file path if successful, None otherwise
+    """
+    try:
+        # Generate new filename
+        new_filename = generate_organized_filename(metadata)
+        if not new_filename:
+            logger.info(f"Skipping PDF organization for paper {paper_id}: insufficient metadata")
+            return None
+        
+        # Get the upload directory (same directory as current file)
+        current_file = Path(current_path)
+        if not current_file.exists():
+            logger.error(f"Current PDF file does not exist: {current_path}")
+            return None
+        
+        upload_dir = current_file.parent
+        new_path = upload_dir / new_filename
+        
+        # Check if target filename already exists
+        if new_path.exists() and new_path != current_file:
+            # Add a counter to make it unique
+            base_name = new_path.stem
+            extension = new_path.suffix
+            counter = 1
+            while new_path.exists():
+                new_path = upload_dir / f"{base_name} ({counter}){extension}"
+                counter += 1
+        
+        # Don't rename if it's already the target name
+        if new_path == current_file:
+            logger.info(f"PDF already has organized name: {current_path}")
+            return str(current_path)
+        
+        # Rename the file
+        shutil.move(str(current_file), str(new_path))
+        logger.info(f"Organized PDF for paper {paper_id}: {current_file.name} -> {new_path.name}")
+        
+        return str(new_path)
+        
+    except Exception as e:
+        logger.error(f"Failed to organize PDF for paper {paper_id}: {e}")
+        return None
 
 
 @celery_app.task(bind=True, name="extract_pdf_metadata")
@@ -344,6 +504,19 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
                 for field in bibtex_fields:
                     if metadata.get(field) and not getattr(paper, field, None):
                         setattr(paper, field, metadata[field])
+            
+            # Organize PDF file if extraction was successful
+            if (paper.extraction_status == "completed" and 
+                paper.extraction_confidence >= 0.7 and
+                paper.file_path):
+                
+                logger.info(f"Attempting to organize PDF for paper {paper_id}")
+                new_path = organize_pdf_file(paper_id, paper.file_path, extraction_result.get("metadata", {}))
+                
+                if new_path and new_path != paper.file_path:
+                    # Update the file path in database
+                    paper.file_path = new_path
+                    logger.info(f"Updated file path for paper {paper_id}: {new_path}")
             
             # Commit changes
             db.commit()
