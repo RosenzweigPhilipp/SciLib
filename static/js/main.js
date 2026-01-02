@@ -751,14 +751,10 @@ class PaperManager {
                     </div>
                 ` : ''}
                 
-                <div id="recommendations-section"></div>
                 <div id="discovery-section"></div>
             `;
             
             UIComponents.showModal('paper-details-modal');
-            
-            // Load recommendations asynchronously
-            this.loadRecommendations(paperId);
             
             // Initialize discovery section
             this.initializeDiscoverySection(paper);
