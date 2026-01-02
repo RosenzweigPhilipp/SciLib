@@ -463,16 +463,98 @@
     background: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: 8px;
-    padding: 1rem;
-    margin: 1rem 0;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
 }
 
 .ai-extraction-info h4 {
-    margin: 0 0 1rem 0;
+    margin: 0 0 1.5rem 0;
     color: #495057;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    font-size: 1rem;
+}
+
+/* Pipeline Steps */
+.pipeline-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+}
+
+.pipeline-step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.step-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.step-icon.success {
+    background: #d4edda;
+    color: #28a745;
+}
+
+.step-icon.info {
+    background: #d1ecf1;
+    color: #17a2b8;
+}
+
+.step-icon.warning {
+    background: #fff3cd;
+    color: #ffc107;
+}
+
+.step-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.step-label {
+    font-weight: 600;
+    color: #333;
+    font-size: 0.9rem;
+}
+
+.step-description {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.step-arrow {
+    color: #adb5bd;
+    font-size: 1rem;
+    padding: 0 0.5rem;
+}
+
+.pipeline-simple {
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #28a745;
+    font-weight: 500;
+}
+
+.pipeline-simple i {
+    font-size: 1.2rem;
 }
 
 .ai-stats {

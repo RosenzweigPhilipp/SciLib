@@ -1361,27 +1361,103 @@ class PaperManager {
         }
         
         let aiSection = '<div class="ai-extraction-info">';
-        aiSection += '<h4><i class="fas fa-robot"></i> AI Extraction Details</h4>';
+        aiSection += '<h4><i class="fas fa-robot"></i> AI Extraction Pipeline</h4>';
         
         if (paper.extraction_status === 'completed') {
-            aiSection += `<div class="ai-stats">`;
-            aiSection += `<div class="ai-stat"><label>Confidence</label><value>${Math.round((paper.extraction_confidence || 0) * 100)}%</value></div>`;
+            // Parse extraction metadata to show pipeline steps
+            let pipelineSteps = [];
+            let sources = [];
             
-            if (paper.extraction_sources) {
-                try {
-                    const sources = typeof paper.extraction_sources === 'string' 
-                        ? JSON.parse(paper.extraction_sources) 
-                        : paper.extraction_sources;
-                    if (Array.isArray(sources) && sources.length > 0) {
-                        aiSection += `<div class="ai-stat"><label>Sources</label><value>${sources.join(', ')}</value></div>`;
-                    }
-                } catch (e) {
-                    // Ignore JSON parse errors
+            try {
+                const metadata = paper.extraction_metadata;
+                const sourcesData = typeof paper.extraction_sources === 'string' 
+                    ? JSON.parse(paper.extraction_sources) 
+                    : paper.extraction_sources;
+                
+                if (Array.isArray(sourcesData)) {
+                    sources = sourcesData;
                 }
+                
+                // Determine pipeline steps based on sources
+                if (metadata && metadata.doi_found) {
+                    pipelineSteps.push({
+                        icon: 'fa-fingerprint',
+                        label: 'DOI Discovered',
+                        description: metadata.doi || 'Found in PDF',
+                        type: 'success'
+                    });
+                }
+                
+                // API sources
+                const apiSources = sources.filter(s => 
+                    s.toLowerCase().includes('crossref') || 
+                    s.toLowerCase().includes('arxiv') || 
+                    s.toLowerCase().includes('semantic') ||
+                    s.toLowerCase().includes('openalex')
+                );
+                
+                if (apiSources.length > 0) {
+                    pipelineSteps.push({
+                        icon: 'fa-database',
+                        label: 'API Data Retrieved',
+                        description: apiSources.join(', '),
+                        type: 'success'
+                    });
+                }
+                
+                // LLM usage
+                const llmSources = sources.filter(s => 
+                    s.toLowerCase().includes('llm') || 
+                    s.toLowerCase().includes('gpt') ||
+                    s.toLowerCase().includes('openai')
+                );
+                
+                if (llmSources.length > 0) {
+                    pipelineSteps.push({
+                        icon: 'fa-brain',
+                        label: 'LLM Analysis',
+                        description: 'AI-powered validation',
+                        type: 'info'
+                    });
+                }
+                
+                // PDF extraction
+                if (sources.some(s => s.toLowerCase().includes('pdf'))) {
+                    pipelineSteps.push({
+                        icon: 'fa-file-pdf',
+                        label: 'PDF Extraction',
+                        description: 'Direct text extraction',
+                        type: 'info'
+                    });
+                }
+                
+            } catch (e) {
+                console.error('Error parsing extraction metadata:', e);
             }
-            aiSection += `</div>`;
             
-            // Metadata info removed per user request
+            // Display pipeline steps
+            if (pipelineSteps.length > 0) {
+                aiSection += '<div class="pipeline-steps">';
+                pipelineSteps.forEach((step, idx) => {
+                    aiSection += `
+                        <div class="pipeline-step">
+                            <div class="step-icon ${step.type}">
+                                <i class="fas ${step.icon}"></i>
+                            </div>
+                            <div class="step-content">
+                                <div class="step-label">${step.label}</div>
+                                <div class="step-description">${step.description}</div>
+                            </div>
+                            ${idx < pipelineSteps.length - 1 ? '<div class="step-arrow"><i class="fas fa-arrow-right"></i></div>' : ''}
+                        </div>
+                    `;
+                });
+                aiSection += '</div>';
+            } else {
+                // Fallback if no metadata
+                aiSection += '<div class="pipeline-simple"><i class="fas fa-check-circle"></i> Metadata extracted successfully</div>';
+            }
+            
         } else if (paper.extraction_status === 'failed') {
             aiSection += '<div class="ai-error">';
             aiSection += '<p><i class="fas fa-exclamation-triangle"></i> AI extraction failed. This paper was entered manually.</p>';
