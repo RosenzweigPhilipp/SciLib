@@ -331,6 +331,23 @@ const Utils = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    formatAuthors(authors, maxAuthors = 3) {
+        if (!authors) return '';
+        
+        // Split authors by common delimiters
+        const authorList = authors.split(/[;,]|\band\b/i)
+            .map(a => a.trim())
+            .filter(a => a.length > 0);
+        
+        if (authorList.length <= maxAuthors) {
+            return authors;
+        }
+        
+        // Return first maxAuthors + et al.
+        const abbreviated = authorList.slice(0, maxAuthors).join(', ') + ' et al.';
+        return abbreviated;
     }
 };
 

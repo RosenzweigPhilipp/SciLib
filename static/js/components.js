@@ -59,7 +59,7 @@ class UIComponents {
                 </div>
                 ${aiStatus}
             </div>
-            <div class="paper-authors">${Utils.sanitizeHtml(paper.authors)}</div>
+            <div class="paper-authors">${Utils.sanitizeHtml(Utils.formatAuthors(paper.authors, 3))}</div>
             ${collectionBadges}
             ${paper.abstract ? `<div class="paper-abstract-preview">${Utils.truncateText(paper.abstract)}</div>` : ''}
             <div class="paper-meta">

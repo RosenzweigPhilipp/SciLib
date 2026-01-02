@@ -701,7 +701,9 @@ class PaperManager {
                 ${statusBanner}
                 <div class="paper-header">
                     <h3>${Utils.sanitizeHtml(paper.title)}</h3>
-                    <div class="authors">${Utils.sanitizeHtml(paper.authors)}</div>
+                    <div class="authors" id="paper-authors-display" style="cursor: pointer;" title="Click to show all authors">
+                        ${Utils.sanitizeHtml(Utils.formatAuthors(paper.authors, 3))}
+                    </div>
                     <div style="margin-top: 0.5rem;">
                         ${UIComponents.getAIStatusBadge(paper)}
                     </div>
@@ -756,6 +758,9 @@ class PaperManager {
             
             UIComponents.showModal('paper-details-modal');
             
+            // Add click handler for authors toggle
+            this.setupAuthorsToggle(paper.authors);
+            
             // Initialize discovery section
             this.initializeDiscoverySection(paper);
             
@@ -763,6 +768,27 @@ class PaperManager {
             console.error('Error loading paper details:', error);
             UIComponents.showNotification('Failed to load paper details', 'error');
         }
+    }
+    
+    setupAuthorsToggle(fullAuthors) {
+        const authorsDisplay = document.getElementById('paper-authors-display');
+        if (!authorsDisplay || !fullAuthors) return;
+        
+        let isExpanded = false;
+        
+        authorsDisplay.addEventListener('click', () => {
+            if (isExpanded) {
+                // Show abbreviated
+                authorsDisplay.innerHTML = Utils.sanitizeHtml(Utils.formatAuthors(fullAuthors, 3));
+                authorsDisplay.title = 'Click to show all authors';
+                isExpanded = false;
+            } else {
+                // Show all
+                authorsDisplay.innerHTML = Utils.sanitizeHtml(fullAuthors);
+                authorsDisplay.title = 'Click to show fewer authors';
+                isExpanded = true;
+            }
+        });
     }
     
     generateKeyFindingsContent(paper) {
@@ -1378,7 +1404,19 @@ class PaperManager {
                     sources = sourcesData;
                 }
                 
-                // Determine pipeline steps based on sources
+                // Determine pipeline steps based on sources (in actual execution order)
+                
+                // 1. PDF extraction (always first - extracts text from PDF)
+                if (sources.some(s => s.toLowerCase().includes('pdf'))) {
+                    pipelineSteps.push({
+                        icon: 'fa-file-pdf',
+                        label: 'PDF Extraction',
+                        description: 'Direct text extraction',
+                        type: 'success'
+                    });
+                }
+                
+                // 2. DOI discovery (found in extracted PDF text)
                 if (metadata && metadata.doi_found) {
                     pipelineSteps.push({
                         icon: 'fa-fingerprint',
@@ -1388,7 +1426,7 @@ class PaperManager {
                     });
                 }
                 
-                // API sources
+                // 3. API sources (queried with DOI or metadata)
                 const apiSources = sources.filter(s => 
                     s.toLowerCase().includes('crossref') || 
                     s.toLowerCase().includes('arxiv') || 
@@ -1407,15 +1445,18 @@ class PaperManager {
                         return s;
                     });
                     
+                    // Remove duplicates
+                    const uniqueSources = [...new Set(formattedSources)];
+                    
                     pipelineSteps.push({
                         icon: 'fa-database',
                         label: 'API Data Retrieved',
-                        description: formattedSources.join(', '),
+                        description: uniqueSources.join(', '),
                         type: 'success'
                     });
                 }
                 
-                // LLM usage
+                // 4. LLM analysis (optional - for validation/enhancement)
                 const llmSources = sources.filter(s => 
                     s.toLowerCase().includes('llm') || 
                     s.toLowerCase().includes('gpt') ||
@@ -1431,15 +1472,7 @@ class PaperManager {
                     });
                 }
                 
-                // PDF extraction
-                if (sources.some(s => s.toLowerCase().includes('pdf'))) {
-                    pipelineSteps.push({
-                        icon: 'fa-file-pdf',
-                        label: 'PDF Extraction',
-                        description: 'Direct text extraction',
-                        type: 'info'
-                    });
-                }
+                // Note: Cross-validation happens throughout but isn't shown as separate step
                 
             } catch (e) {
                 console.error('Error parsing extraction metadata:', e);
