@@ -1397,10 +1397,20 @@ class PaperManager {
                 );
                 
                 if (apiSources.length > 0) {
+                    // Format source names nicely
+                    const formattedSources = apiSources.map(s => {
+                        const lower = s.toLowerCase();
+                        if (lower.includes('crossref')) return 'CrossRef';
+                        if (lower.includes('semantic')) return 'Semantic Scholar';
+                        if (lower.includes('openalex')) return 'OpenAlex';
+                        if (lower.includes('arxiv')) return 'arXiv';
+                        return s;
+                    });
+                    
                     pipelineSteps.push({
                         icon: 'fa-database',
                         label: 'API Data Retrieved',
-                        description: apiSources.join(', '),
+                        description: formattedSources.join(', '),
                         type: 'success'
                     });
                 }
