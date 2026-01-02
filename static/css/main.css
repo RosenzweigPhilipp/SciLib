@@ -818,3 +818,18 @@ body {
 .discovery-show-more button {
     min-width: 200px;
 }
+
+.badge-experimental {
+    background: #ff9800;
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+.badge-experimental i {
+    font-size: 0.75rem;
+}

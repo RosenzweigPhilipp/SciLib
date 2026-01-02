@@ -1033,7 +1033,10 @@ class PaperManager {
         
         container.innerHTML = `
             <div class="discovery-section">
-                <h4><i class="fas fa-globe"></i> External Discovery</h4>
+                <h4>
+                    <i class="fas fa-globe"></i> External Discovery
+                    <span class="badge badge-experimental"><i class="fas fa-flask"></i> Experimental</span>
+                </h4>
                 <p class="discovery-description">Search external databases for similar papers</p>
                 <button class="btn btn-primary" onclick="window.paperManager.discoverSimilarPapers(${paper.id})">
                     <i class="fas fa-search"></i> Discover Similar Papers
@@ -1130,7 +1133,7 @@ class PaperManager {
                     ` : ''}
                     <div class="discovery-result-actions">
                         ${!inLibrary ? `
-                            <button class="btn btn-sm btn-primary" onclick="window.paperManager.addDiscoveredPaper(${paperId}, ${idx})">
+                            <button class="btn btn-sm btn-secondary" disabled title="Coming soon - feature in development">
                                 <i class="fas fa-plus"></i> Add to Library
                             </button>
                         ` : `
