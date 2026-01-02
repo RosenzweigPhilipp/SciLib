@@ -1620,7 +1620,14 @@ class PaperManager {
             document.getElementById('paper-edit-authors').value = paper.authors || '';
             document.getElementById('paper-edit-year').value = paper.year || '';
             document.getElementById('paper-edit-journal').value = paper.journal || '';
+            document.getElementById('paper-edit-publisher').value = paper.publisher || '';
+            document.getElementById('paper-edit-booktitle').value = paper.booktitle || '';
+            document.getElementById('paper-edit-volume').value = paper.volume || '';
+            document.getElementById('paper-edit-issue').value = paper.issue || '';
+            document.getElementById('paper-edit-pages').value = paper.pages || '';
             document.getElementById('paper-edit-doi').value = paper.doi || '';
+            document.getElementById('paper-edit-url').value = paper.url || '';
+            document.getElementById('paper-edit-isbn').value = paper.isbn || '';
             document.getElementById('paper-edit-abstract').value = paper.abstract || '';
             document.getElementById('paper-edit-keywords').value = paper.keywords || '';
             
@@ -1641,7 +1648,14 @@ class PaperManager {
             document.getElementById('paper-edit-authors').value = paper.authors || '';
             document.getElementById('paper-edit-year').value = paper.year || '';
             document.getElementById('paper-edit-journal').value = paper.journal || '';
+            document.getElementById('paper-edit-publisher').value = paper.publisher || '';
+            document.getElementById('paper-edit-booktitle').value = paper.booktitle || '';
+            document.getElementById('paper-edit-volume').value = paper.volume || '';
+            document.getElementById('paper-edit-issue').value = paper.issue || '';
+            document.getElementById('paper-edit-pages').value = paper.pages || '';
             document.getElementById('paper-edit-doi').value = paper.doi || '';
+            document.getElementById('paper-edit-url').value = paper.url || '';
+            document.getElementById('paper-edit-isbn').value = paper.isbn || '';
             document.getElementById('paper-edit-abstract').value = paper.abstract || '';
             document.getElementById('paper-edit-keywords').value = paper.keywords || '';
             
@@ -1901,7 +1915,14 @@ class PaperManager {
             authors: authors,
             year: document.getElementById('paper-edit-year').value ? parseInt(document.getElementById('paper-edit-year').value) : null,
             journal: document.getElementById('paper-edit-journal').value.trim() || null,
+            publisher: document.getElementById('paper-edit-publisher').value.trim() || null,
+            booktitle: document.getElementById('paper-edit-booktitle').value.trim() || null,
+            volume: document.getElementById('paper-edit-volume').value.trim() || null,
+            issue: document.getElementById('paper-edit-issue').value.trim() || null,
+            pages: document.getElementById('paper-edit-pages').value.trim() || null,
             doi: document.getElementById('paper-edit-doi').value.trim() || null,
+            url: document.getElementById('paper-edit-url').value.trim() || null,
+            isbn: document.getElementById('paper-edit-isbn').value.trim() || null,
             abstract: document.getElementById('paper-edit-abstract').value.trim() || null,
             keywords: document.getElementById('paper-edit-keywords').value.trim() || null
         };

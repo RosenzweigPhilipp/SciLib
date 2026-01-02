@@ -50,6 +50,20 @@ class Paper(BaseModel):
     created_at: datetime
     updated_at: datetime
     
+    # Extended BibTeX fields
+    publisher: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    booktitle: Optional[str] = None
+    series: Optional[str] = None
+    edition: Optional[str] = None
+    isbn: Optional[str] = None
+    url: Optional[str] = None
+    month: Optional[int] = None
+    note: Optional[str] = None
+    publication_type: Optional[str] = None
+    
     # AI Extraction fields
     extraction_status: Optional[str] = None
     extraction_confidence: Optional[float] = None
@@ -85,6 +99,18 @@ class PaperCreate(BaseModel):
     year: Optional[int] = None
     journal: Optional[str] = None
     doi: Optional[str] = None
+    publisher: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    booktitle: Optional[str] = None
+    series: Optional[str] = None
+    edition: Optional[str] = None
+    isbn: Optional[str] = None
+    url: Optional[str] = None
+    month: Optional[int] = None
+    note: Optional[str] = None
+    publication_type: Optional[str] = None
 
 
 class PaperUpdate(BaseModel):
@@ -95,6 +121,18 @@ class PaperUpdate(BaseModel):
     year: Optional[int] = None
     journal: Optional[str] = None
     doi: Optional[str] = None
+    publisher: Optional[str] = None
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    booktitle: Optional[str] = None
+    series: Optional[str] = None
+    edition: Optional[str] = None
+    isbn: Optional[str] = None
+    url: Optional[str] = None
+    month: Optional[int] = None
+    note: Optional[str] = None
+    publication_type: Optional[str] = None
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
