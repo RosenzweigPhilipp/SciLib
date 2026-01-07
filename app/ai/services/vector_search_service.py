@@ -427,5 +427,7 @@ async def find_similar_papers(
         return results
         
     except Exception as e:
+        db.rollback()  # Rollback to clean transaction state
         logger.error(f"Similarity search failed for paper {paper_id}: {str(e)}", exc_info=True)
+        raise  # Re-raise to let caller handle
         return []

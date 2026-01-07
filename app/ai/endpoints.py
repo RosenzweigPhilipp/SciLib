@@ -249,10 +249,17 @@ async def get_similar_papers(
             exclude_self=True
         )
         
-        # Cache the results
-        paper.similar_papers = similar_papers
-        paper.similar_papers_updated_at = datetime.now()
-        db.commit()
+        # Cache the results - use a fresh query to avoid transaction issues
+        try:
+            db.rollback()  # Clear any failed transaction state
+            paper = db.query(Paper).filter(Paper.id == paper_id).first()
+            if paper:
+                paper.similar_papers = similar_papers
+                paper.similar_papers_updated_at = datetime.now()
+                db.commit()
+        except Exception as cache_error:
+            logger.warning(f"Failed to cache similar papers: {cache_error}")
+            db.rollback()
         
         logger.info(f"Found {len(similar_papers)} similar papers for paper {paper_id}")
         
@@ -264,6 +271,7 @@ async def get_similar_papers(
         }
         
     except Exception as e:
+        db.rollback()  # Ensure transaction is rolled back
         logger.error(f"Similarity search failed for paper {paper_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Similarity search failed: {str(e)}")
 
