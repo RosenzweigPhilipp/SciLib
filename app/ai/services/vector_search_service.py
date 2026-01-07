@@ -340,3 +340,92 @@ async def search_papers(
         results = await VectorSearchService.hybrid_search(db, query, limit, **filters)
     
     return [result.to_dict() for result in results]
+
+
+async def find_similar_papers(
+    db: Session,
+    paper_id: int,
+    limit: int = 10,
+    min_score: float = 0.5,
+    exclude_self: bool = True
+) -> List[Dict[str, Any]]:
+    """
+    Find papers similar to a given paper using vector similarity.
+    
+    This is a fast operation as it uses pre-computed embeddings.
+    
+    Args:
+        db: Database session
+        paper_id: ID of the paper to find similar papers for
+        limit: Maximum number of results
+        min_score: Minimum similarity score (0.0 to 1.0)
+        exclude_self: Whether to exclude the source paper from results
+        
+    Returns:
+        List of similar paper dictionaries with similarity scores
+    """
+    # Get the source paper's embedding
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    
+    if not paper:
+        logger.warning(f"Paper {paper_id} not found")
+        return []
+    
+    if paper.embedding_title_abstract is None:
+        logger.warning(f"Paper {paper_id} has no embedding")
+        return []
+    
+    # Build SQL query for vector similarity search
+    sql = """
+        SELECT 
+            p.id,
+            1 - (p.embedding_title_abstract <=> CAST(:source_embedding AS vector)) AS similarity
+        FROM papers p
+        WHERE p.embedding_title_abstract IS NOT NULL
+    """
+    
+    params = {"source_embedding": str(list(paper.embedding_title_abstract))}
+    
+    # Exclude self if requested
+    if exclude_self:
+        sql += " AND p.id != :paper_id"
+        params["paper_id"] = paper_id
+    
+    # Add minimum score filter
+    sql += " AND (1 - (p.embedding_title_abstract <=> CAST(:source_embedding AS vector))) >= :min_score"
+    params["min_score"] = min_score
+    
+    # Order by similarity and limit
+    sql += """
+        ORDER BY p.embedding_title_abstract <=> CAST(:source_embedding AS vector)
+        LIMIT :limit
+    """
+    params["limit"] = limit
+    
+    try:
+        result = db.execute(text(sql), params)
+        rows = result.fetchall()
+        
+        # Fetch full paper objects and create results
+        results = []
+        for similar_paper_id, similarity in rows:
+            similar_paper = db.query(Paper).filter(Paper.id == similar_paper_id).first()
+            if similar_paper:
+                results.append({
+                    "paper_id": similar_paper.id,
+                    "title": similar_paper.title,
+                    "authors": similar_paper.authors,
+                    "abstract": similar_paper.abstract[:300] + "..." if similar_paper.abstract and len(similar_paper.abstract) > 300 else similar_paper.abstract,
+                    "year": similar_paper.year,
+                    "journal": similar_paper.journal,
+                    "doi": similar_paper.doi,
+                    "similarity_score": round(float(similarity), 4),
+                    "has_summary": similar_paper.ai_summary_short is not None
+                })
+        
+        logger.info(f"Found {len(results)} similar papers for paper {paper_id}")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Similarity search failed for paper {paper_id}: {str(e)}", exc_info=True)
+        return []

@@ -2,11 +2,12 @@
 Simplified AI endpoints for SciLib metadata extraction.
 Minimal version that works with session token authentication.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 import logging
 import os
+from datetime import datetime
 
 from ..database.connection import get_db
 from ..database.models import Paper
@@ -142,3 +143,132 @@ async def get_extraction_results(
         "extraction_metadata": paper.extraction_metadata or {},
         "extraction_sources": paper.extraction_sources or []
     }
+
+
+@router.get("/paper/{paper_id}/similar")
+async def get_similar_papers(
+    paper_id: int,
+    limit: int = Query(default=10, ge=1, le=50),
+    min_score: float = Query(default=0.5, ge=0.0, le=1.0),
+    refresh: bool = Query(default=False, description="Force refresh similarity search"),
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    """
+    Get papers similar to the specified paper using vector similarity search.
+    
+    This uses pre-computed embeddings for fast similarity lookup.
+    Results are cached in the database and refreshed when:
+    - refresh=True is passed
+    - Cached results are older than 24 hours
+    - New papers have been added since last search
+    """
+    from .services.vector_search_service import find_similar_papers
+    
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    # Check if we have cached results that are still valid
+    cache_valid = False
+    if paper.similar_papers and paper.similar_papers_updated_at and not refresh:
+        # Check if cache is less than 24 hours old
+        cache_age = datetime.now() - paper.similar_papers_updated_at.replace(tzinfo=None)
+        if cache_age.total_seconds() < 86400:  # 24 hours
+            cache_valid = True
+    
+    if cache_valid:
+        logger.info(f"Returning cached similar papers for paper {paper_id}")
+        return {
+            "paper_id": paper_id,
+            "similar_papers": paper.similar_papers,
+            "cached": True,
+            "cached_at": paper.similar_papers_updated_at.isoformat() if paper.similar_papers_updated_at else None
+        }
+    
+    # Check if paper has embedding
+    if paper.embedding_title_abstract is None:
+        # Try to generate embedding first
+        logger.info(f"Paper {paper_id} has no embedding, attempting to generate...")
+        try:
+            from .services.embedding_service import EmbeddingService
+            import asyncio
+            
+            embedding = await EmbeddingService.generate_paper_embedding(
+                paper.title, 
+                paper.abstract
+            )
+            if embedding:
+                paper.embedding_title_abstract = embedding
+                paper.embedding_generated_at = datetime.now()
+                db.commit()
+                logger.info(f"Generated embedding for paper {paper_id}")
+            else:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Cannot perform similarity search: paper has no embedding and generation failed"
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to generate embedding for paper {paper_id}: {e}")
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot perform similarity search: paper has no embedding"
+            )
+    
+    # Perform similarity search
+    try:
+        similar_papers = await find_similar_papers(
+            db=db,
+            paper_id=paper_id,
+            limit=limit,
+            min_score=min_score,
+            exclude_self=True
+        )
+        
+        # Cache the results
+        paper.similar_papers = similar_papers
+        paper.similar_papers_updated_at = datetime.now()
+        db.commit()
+        
+        logger.info(f"Found {len(similar_papers)} similar papers for paper {paper_id}")
+        
+        return {
+            "paper_id": paper_id,
+            "similar_papers": similar_papers,
+            "cached": False,
+            "total": len(similar_papers)
+        }
+        
+    except Exception as e:
+        logger.error(f"Similarity search failed for paper {paper_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Similarity search failed: {str(e)}")
+
+
+@router.post("/paper/{paper_id}/similar/refresh")
+async def refresh_similar_papers(
+    paper_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    """Force refresh the similar papers cache for a paper."""
+    from .tasks import find_similar_papers_task
+    
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    try:
+        # Start background task
+        task = find_similar_papers_task.delay(paper_id, force_refresh=True)
+        
+        return {
+            "task_id": task.id,
+            "paper_id": paper_id,
+            "status": "started",
+            "message": "Similarity search task started"
+        }
+    except Exception as e:
+        logger.error(f"Failed to start similarity search task: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -772,6 +772,8 @@ class PaperManager {
                     </div>
                 ` : ''}
                 
+                <div id="similar-papers-section"></div>
+                
                 <div id="discovery-section"></div>
             `;
             
@@ -779,6 +781,9 @@ class PaperManager {
             
             // Add click handler for authors toggle
             this.setupAuthorsToggle(paper.authors);
+            
+            // Initialize similar papers section (internal library search)
+            this.initializeSimilarPapersSection(paper);
             
             // Initialize discovery section
             this.initializeDiscoverySection(paper);
@@ -1154,6 +1159,126 @@ class PaperManager {
                     <p class="error-message">Failed to load recommendations.</p>
                 </div>
             `;
+        }
+    }
+    
+    /**
+     * Initialize the Similar Papers section using vector similarity search.
+     * This searches within the user's library for related papers.
+     */
+    async initializeSimilarPapersSection(paper) {
+        const container = document.getElementById('similar-papers-section');
+        if (!container) return;
+        
+        // Show loading state
+        container.innerHTML = `
+            <div class="similar-papers-section">
+                <h4>
+                    <i class="fas fa-project-diagram"></i> Similar Papers in Library
+                </h4>
+                <div class="similar-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Finding similar papers...</span>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // Fetch similar papers from API
+            const response = await API.request(`/api/ai/paper/${paper.id}/similar?limit=5&min_score=0.5`);
+            
+            if (!response.similar_papers || response.similar_papers.length === 0) {
+                container.innerHTML = `
+                    <div class="similar-papers-section">
+                        <h4>
+                            <i class="fas fa-project-diagram"></i> Similar Papers in Library
+                        </h4>
+                        <p class="empty-message">No similar papers found in your library yet.</p>
+                        <p class="hint-text">Similar papers will appear here as you add more papers to your library.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Render similar papers
+            let papersHtml = response.similar_papers.map((similar, idx) => `
+                <div class="similar-paper-item" onclick="window.paperManager.showPaperDetails(${similar.paper_id})">
+                    <div class="similar-paper-rank">#${idx + 1}</div>
+                    <div class="similar-paper-content">
+                        <div class="similar-paper-title">${Utils.sanitizeHtml(similar.title)}</div>
+                        <div class="similar-paper-authors">${Utils.sanitizeHtml(similar.authors || 'Unknown authors')}</div>
+                        <div class="similar-paper-meta">
+                            ${similar.year ? `<span><i class="fas fa-calendar"></i> ${similar.year}</span>` : ''}
+                            ${similar.journal ? `<span><i class="fas fa-book"></i> ${Utils.sanitizeHtml(similar.journal)}</span>` : ''}
+                            <span class="similarity-score" title="Similarity score">
+                                <i class="fas fa-percentage"></i> ${Math.round(similar.similarity_score * 100)}% match
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            container.innerHTML = `
+                <div class="similar-papers-section">
+                    <h4>
+                        <i class="fas fa-project-diagram"></i> Similar Papers in Library
+                        ${response.cached ? '<span class="badge badge-secondary"><i class="fas fa-database"></i> Cached</span>' : ''}
+                    </h4>
+                    <div class="similar-papers-list">
+                        ${papersHtml}
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="window.paperManager.refreshSimilarPapers(${paper.id})">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            `;
+            
+        } catch (error) {
+            console.error('Error loading similar papers:', error);
+            container.innerHTML = `
+                <div class="similar-papers-section">
+                    <h4>
+                        <i class="fas fa-project-diagram"></i> Similar Papers in Library
+                    </h4>
+                    <p class="empty-message">Could not load similar papers.</p>
+                    <p class="hint-text">${error.message || 'Make sure the paper has been processed.'}</p>
+                </div>
+            `;
+        }
+    }
+    
+    /**
+     * Refresh similar papers for a given paper.
+     */
+    async refreshSimilarPapers(paperId) {
+        const container = document.getElementById('similar-papers-section');
+        if (!container) return;
+        
+        // Show loading
+        const refreshBtn = container.querySelector('.btn-secondary');
+        if (refreshBtn) {
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            refreshBtn.disabled = true;
+        }
+        
+        try {
+            // Force refresh
+            const response = await API.request(`/api/ai/paper/${paperId}/similar?limit=5&min_score=0.5&refresh=true`);
+            
+            // Re-initialize the section with fresh data
+            const paper = await API.papers.get(paperId);
+            await this.initializeSimilarPapersSection(paper);
+            
+            UIComponents.showNotification('Similar papers refreshed', 'success');
+        } catch (error) {
+            console.error('Error refreshing similar papers:', error);
+            UIComponents.showNotification('Failed to refresh similar papers', 'error');
+            
+            // Re-enable button
+            if (refreshBtn) {
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
+                refreshBtn.disabled = false;
+            }
         }
     }
     

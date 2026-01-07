@@ -78,6 +78,10 @@ class Paper(Base):
     llm_knowledge_confidence = Column(Float)  # 0.0-1.0 confidence score
     llm_knowledge_checked_at = Column(DateTime(timezone=True))
     
+    # Similar papers (cached results from vector similarity search)
+    similar_papers = Column(JSON)  # List of {paper_id, similarity_score, title}
+    similar_papers_updated_at = Column(DateTime(timezone=True))
+    
     # Citation fields
     citation_count = Column(Integer, default=0, index=True)  # Times cited by other library papers
     reference_count = Column(Integer, default=0)  # Papers this paper cites in library

@@ -760,6 +760,13 @@ def generate_paper_embedding_task(self, paper_id: int, force_regenerate: bool = 
                     "failed_at": datetime.now().isoformat()
                 }
         
+        # Trigger similarity search after embedding is generated
+        try:
+            find_similar_papers_task.delay(paper_id, force_refresh=True)
+            logger.info(f"Triggered similarity search after embedding generation for paper {paper_id}")
+        except Exception as sim_error:
+            logger.warning(f"Failed to trigger similarity search for paper {paper_id}: {sim_error}")
+        
         return {
             "status": "SUCCESS",
             "paper_id": paper_id,
@@ -769,6 +776,129 @@ def generate_paper_embedding_task(self, paper_id: int, force_regenerate: bool = 
         
     except Exception as e:
         logger.error(f"Embedding generation failed for paper {paper_id}: {str(e)}", exc_info=True)
+        return {
+            "status": "FAILURE",
+            "paper_id": paper_id,
+            "error": str(e),
+            "failed_at": datetime.now().isoformat()
+        }
+
+
+@celery_app.task(bind=True, name="find_similar_papers")
+def find_similar_papers_task(self, paper_id: int, force_refresh: bool = False, limit: int = 10, min_score: float = 0.5) -> Dict[str, Any]:
+    """
+    Celery task for finding similar papers using vector similarity search.
+    
+    This task is triggered:
+    1. After embedding generation during summary generation
+    2. When user opens paper details (if cache is stale)
+    3. Manually via the refresh endpoint
+    
+    Args:
+        paper_id: Database ID of the paper
+        force_refresh: If True, refresh even if cached results exist
+        limit: Maximum number of similar papers to find
+        min_score: Minimum similarity score (0.0 to 1.0)
+        
+    Returns:
+        Dict with similar papers and status
+    """
+    try:
+        self.update_state(
+            state="PROGRESS",
+            meta={
+                "current": 0,
+                "total": 100,
+                "status": "Finding similar papers..."
+            }
+        )
+        
+        logger.info(f"Starting similarity search for paper {paper_id} (force: {force_refresh})")
+        
+        from ..database import SessionLocal
+        from ..database.models import Paper as PaperModel
+        from .services.vector_search_service import find_similar_papers
+        import asyncio
+        
+        with SessionLocal() as db:
+            paper = db.query(PaperModel).filter(PaperModel.id == paper_id).first()
+            if not paper:
+                logger.error(f"Paper {paper_id} not found")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper not found",
+                    "failed_at": datetime.now().isoformat()
+                }
+            
+            # Check if we need to refresh
+            if not force_refresh and paper.similar_papers and paper.similar_papers_updated_at:
+                cache_age = datetime.now() - paper.similar_papers_updated_at.replace(tzinfo=None)
+                if cache_age.total_seconds() < 86400:  # 24 hours
+                    logger.info(f"Using cached similar papers for paper {paper_id}")
+                    return {
+                        "status": "SUCCESS",
+                        "paper_id": paper_id,
+                        "similar_papers": paper.similar_papers,
+                        "cached": True,
+                        "completed_at": datetime.now().isoformat()
+                    }
+            
+            # Check if paper has embedding
+            if paper.embedding_title_abstract is None:
+                logger.warning(f"Paper {paper_id} has no embedding, cannot find similar papers")
+                return {
+                    "status": "FAILURE",
+                    "paper_id": paper_id,
+                    "error": "Paper has no embedding",
+                    "failed_at": datetime.now().isoformat()
+                }
+            
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "current": 50,
+                    "total": 100,
+                    "status": "Performing vector similarity search..."
+                }
+            )
+            
+            # Perform similarity search
+            similar_papers = asyncio.run(find_similar_papers(
+                db=db,
+                paper_id=paper_id,
+                limit=limit,
+                min_score=min_score,
+                exclude_self=True
+            ))
+            
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "current": 90,
+                    "total": 100,
+                    "status": "Caching results..."
+                }
+            )
+            
+            # Cache results in database
+            paper.similar_papers = similar_papers
+            paper.similar_papers_updated_at = datetime.now()
+            db.commit()
+            
+            logger.info(f"Found {len(similar_papers)} similar papers for paper {paper_id}")
+            
+            return {
+                "status": "SUCCESS",
+                "paper_id": paper_id,
+                "similar_papers": similar_papers,
+                "count": len(similar_papers),
+                "cached": False,
+                "completed_at": datetime.now().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"Similarity search failed for paper {paper_id}: {str(e)}", exc_info=True)
         return {
             "status": "FAILURE",
             "paper_id": paper_id,
@@ -1059,6 +1189,13 @@ def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
                         db.commit()
                         
                         logger.info(f"Successfully saved summaries for paper {paper_id}: short={bool(short)}, long={bool(long)}, findings={len(findings) if findings else 0}, eli5={bool(eli5)}")
+                        
+                        # Trigger similarity search in background
+                        try:
+                            find_similar_papers_task.delay(paper_id, force_refresh=True)
+                            logger.info(f"Triggered similarity search for paper {paper_id}")
+                        except Exception as sim_error:
+                            logger.warning(f"Failed to trigger similarity search for paper {paper_id}: {sim_error}")
                         
                         return {
                             "status": "SUCCESS",
