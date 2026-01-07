@@ -676,6 +676,9 @@ class PaperManager {
             // Generate AI extraction info
             const aiInfo = this.generateAIExtractionInfo(paper);
             
+            // Generate type-specific metadata fields
+            const metaFields = this.generateTypeSpecificMetaFields(paper);
+            
             // Add status banner based on current state
             let statusBanner = '';
             const isGeneratingSummary = this.activeSummaryTasks.has(paper.id);
@@ -710,22 +713,14 @@ class PaperManager {
                     <div class="authors" id="paper-authors-display" style="cursor: pointer;" title="Click to show all authors">
                         ${Utils.sanitizeHtml(Utils.formatAuthors(paper.authors, 3))}
                     </div>
-                    <div style="margin-top: 0.5rem;">
+                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center;">
+                        ${UIComponents.getPublicationTypeBadge(paper.publication_type)}
                         ${UIComponents.getAIStatusBadge(paper)}
                     </div>
                 </div>
                 
                 <div class="paper-meta-grid">
-                    ${paper.year ? `<div class="meta-item"><label>Year</label><value>${paper.year}</value></div>` : ''}
-                    ${paper.journal ? `<div class="meta-item"><label>Journal</label><value>${Utils.sanitizeHtml(paper.journal)}</value></div>` : ''}
-                    ${paper.publisher ? `<div class="meta-item"><label>Publisher</label><value>${Utils.sanitizeHtml(paper.publisher)}</value></div>` : ''}
-                    ${paper.volume ? `<div class="meta-item"><label>Volume</label><value>${paper.volume}</value></div>` : ''}
-                    ${paper.issue ? `<div class="meta-item"><label>Issue</label><value>${paper.issue}</value></div>` : ''}
-                    ${paper.pages ? `<div class="meta-item"><label>Pages</label><value>${paper.pages}</value></div>` : ''}
-                    ${paper.booktitle ? `<div class="meta-item"><label>Conference</label><value>${Utils.sanitizeHtml(paper.booktitle)}</value></div>` : ''}
-                    ${paper.doi ? `<div class="meta-item"><label>DOI</label><value>${Utils.sanitizeHtml(paper.doi)}</value></div>` : ''}
-                    <div class="meta-item"><label>Uploaded</label><value>${Utils.formatDate(paper.created_at)}</value></div>
-                    ${paper.extracted_at ? `<div class="meta-item"><label>AI Extracted</label><value>${Utils.formatDate(paper.extracted_at)}</value></div>` : ''}
+                    ${metaFields}
                 </div>
                 
                 <div class="action-buttons" style="margin: 1rem 0; display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -792,6 +787,95 @@ class PaperManager {
             console.error('Error loading paper details:', error);
             UIComponents.showNotification('Failed to load paper details', 'error');
         }
+    }
+    
+    /**
+     * Generate type-specific metadata fields for paper details view
+     */
+    generateTypeSpecificMetaFields(paper) {
+        const type = paper.publication_type || 'article';
+        let fields = [];
+        
+        // Helper to add a field if it has a value
+        const addField = (label, value) => {
+            if (value) {
+                fields.push(`<div class="meta-item"><label>${label}</label><value>${Utils.sanitizeHtml(String(value))}</value></div>`);
+            }
+        };
+        
+        // Common fields for all types
+        addField('Year', paper.year);
+        
+        // Type-specific fields
+        switch (type) {
+            case 'article':
+                addField('Journal', paper.journal);
+                addField('Volume', paper.volume);
+                addField('Issue', paper.issue);
+                addField('Pages', paper.pages);
+                addField('Publisher', paper.publisher);
+                break;
+                
+            case 'inproceedings':
+                addField('Conference', paper.booktitle || paper.journal);
+                addField('Pages', paper.pages);
+                addField('Publisher', paper.publisher);
+                addField('Series', paper.series);
+                break;
+                
+            case 'book':
+                addField('Publisher', paper.publisher);
+                addField('Edition', paper.edition);
+                addField('Volume', paper.volume);
+                addField('Series', paper.series);
+                addField('ISBN', paper.isbn);
+                break;
+                
+            case 'inbook':
+                addField('Book Title', paper.booktitle);
+                addField('Chapter', paper.chapter);
+                addField('Pages', paper.pages);
+                addField('Publisher', paper.publisher);
+                addField('Edition', paper.edition);
+                addField('ISBN', paper.isbn);
+                break;
+                
+            case 'incollection':
+                addField('Book Title', paper.booktitle);
+                addField('Chapter', paper.chapter);
+                addField('Pages', paper.pages);
+                addField('Publisher', paper.publisher);
+                addField('Series', paper.series);
+                break;
+                
+            case 'phdthesis':
+            case 'mastersthesis':
+                addField('Institution', paper.institution || paper.publisher);
+                break;
+                
+            case 'techreport':
+                addField('Institution', paper.institution || paper.publisher);
+                addField('Report Number', paper.report_number);
+                break;
+                
+            case 'misc':
+            default:
+                // Show whatever is available
+                addField('Journal/Venue', paper.journal || paper.booktitle);
+                addField('Publisher', paper.publisher);
+                addField('Volume', paper.volume);
+                addField('Pages', paper.pages);
+                break;
+        }
+        
+        // Common fields at the end
+        addField('DOI', paper.doi);
+        fields.push(`<div class="meta-item"><label>Uploaded</label><value>${Utils.formatDate(paper.created_at)}</value></div>`);
+        if (paper.extracted_at) {
+            fields.push(`<div class="meta-item"><label>AI Extracted</label><value>${Utils.formatDate(paper.extracted_at)}</value></div>`);
+        }
+        
+        return fields.join('\n                    ');
     }
     
     setupAuthorsToggle(fullAuthors) {
