@@ -65,6 +65,7 @@ class Paper(Base):
     # AI Summary fields
     ai_summary_short = Column(Text)  # ~50 word summary
     ai_summary_long = Column(Text)  # ~200 word detailed summary
+    ai_summary_eli5 = Column(Text)  # Explain Like I'm 5 - simple explanation
     ai_key_findings = Column(JSON)  # List of key findings/bullet points
     summary_generated_at = Column(DateTime(timezone=True))
     summary_generation_method = Column(String(50))  # 'llm_knowledge', 'full_extraction', 'manual'

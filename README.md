@@ -7,7 +7,8 @@ A modern web application for managing and organizing scientific literature with 
 ### Core Features
 - **Paper Management**: Upload, view, edit, and delete PDF papers with AI metadata extraction
 - **Smart Collections**: AI-powered automatic paper classification into research fields
-- **Manual Collections & Tags**: Organize papers into custom collections and tag them
+- **Manual Collections & Tags**: Orgamain.js:1994 Uncaught SyntaxError: Unexpected token '.'Understand this error
+:8000/favicon.ico:1  Failed to load resource: the server responded with a status of 404 (Not Found)nize papers into custom collections and tag them
 - **Advanced Search**: Semantic search using vector embeddings + traditional keyword search
 - **Similar Papers**: Find related papers in your library and discover external papers
 - **Citation Analysis**: Track citation networks and calculate influence metrics

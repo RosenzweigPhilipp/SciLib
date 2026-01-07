@@ -845,13 +845,13 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
             }
         )
         
-        # Generate all summaries in parallel
-        short_summary, detailed_summary, key_findings = asyncio.run(
+        # Generate all summaries in parallel (including ELI5)
+        short_summary, detailed_summary, key_findings, eli5_summary = asyncio.run(
             SummaryService.generate_complete_summary(title, abstract)
         )
         
         # Check if at least one component was generated
-        if short_summary is None and detailed_summary is None and key_findings is None:
+        if short_summary is None and detailed_summary is None and key_findings is None and eli5_summary is None:
             logger.error(f"Failed to generate any summary components for paper {paper_id}")
             return {
                 "status": "FAILURE",
@@ -880,6 +880,8 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
                     paper.ai_summary_long = detailed_summary
                 if key_findings:
                     paper.ai_key_findings = key_findings
+                if eli5_summary:
+                    paper.ai_summary_eli5 = eli5_summary
                 paper.summary_generated_at = datetime.now()
                 paper.summary_generation_method = "manual"
                 db.commit()
@@ -888,6 +890,7 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
                 logger.info(f"  - Short: {len(short_summary) if short_summary else 0} chars")
                 logger.info(f"  - Detailed: {len(detailed_summary) if detailed_summary else 0} chars")
                 logger.info(f"  - Findings: {len(key_findings) if key_findings else 0} items")
+                logger.info(f"  - ELI5: {len(eli5_summary) if eli5_summary else 0} chars")
             else:
                 logger.error(f"Paper {paper_id} not found when saving summaries")
                 return {
@@ -903,7 +906,8 @@ def generate_paper_summary_task(self, paper_id: int, force_regenerate: bool = Fa
             "generated_components": {
                 "short_summary": short_summary is not None,
                 "detailed_summary": detailed_summary is not None,
-                "key_findings": key_findings is not None
+                "key_findings": key_findings is not None,
+                "eli5_summary": eli5_summary is not None
             },
             "completed_at": datetime.now().isoformat()
         }

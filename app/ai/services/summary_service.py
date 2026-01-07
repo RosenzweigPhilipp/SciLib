@@ -139,6 +139,63 @@ Detailed Summary (200 words):"""
             return None
     
     @staticmethod
+    async def generate_eli5_summary(
+        title: str,
+        abstract: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Generate an ELI5 (Explain Like I'm 5) summary - very simple explanation.
+        
+        Args:
+            title: Paper title
+            abstract: Paper abstract (optional)
+            
+        Returns:
+            ELI5 summary string or None if generation fails
+        """
+        if not title:
+            logger.warning("Cannot generate ELI5 summary without title")
+            return None
+        
+        # Build content from available information
+        content = f"Title: {title}"
+        if abstract and abstract.strip():
+            content += f"\n\nAbstract: {abstract}"
+        
+        prompt = f"""You are explaining a scientific paper to a 5-year-old child. Use very simple words, fun analogies, and short sentences.
+
+Paper information:
+{content}
+
+Explain what this research is about as if you were talking to a curious 5-year-old. Use:
+- Very simple everyday words (no technical jargon)
+- Fun comparisons to things kids know (toys, animals, games, food)
+- Short sentences
+- An enthusiastic, friendly tone
+- About 50-75 words
+
+ELI5 Explanation:"""
+
+        try:
+            response = await client.chat.completions.create(
+                model=SUMMARY_MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a friendly teacher who explains complex scientific concepts to young children using simple words, fun analogies, and an enthusiastic tone."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=200,
+                temperature=0.7  # Slightly higher temperature for more creative analogies
+            )
+            
+            summary = response.choices[0].message.content.strip()
+            logger.info(f"Generated ELI5 summary ({len(summary)} chars)")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to generate ELI5 summary: {str(e)}", exc_info=True)
+            return None
+    
+    @staticmethod
     async def extract_key_findings(
         title: str,
         abstract: Optional[str] = None,
@@ -226,7 +283,7 @@ Key Findings:"""
         title: str,
         abstract: Optional[str] = None,
         full_text_excerpt: Optional[str] = None
-    ) -> Tuple[Optional[str], Optional[str], Optional[List[str]]]:
+    ) -> Tuple[Optional[str], Optional[str], Optional[List[str]], Optional[str]]:
         """
         Generate all summary components in parallel for efficiency.
         
@@ -236,15 +293,16 @@ Key Findings:"""
             full_text_excerpt: Excerpt from paper full text (optional)
             
         Returns:
-            Tuple of (short_summary, detailed_summary, key_findings)
+            Tuple of (short_summary, detailed_summary, key_findings, eli5_summary)
         """
         import asyncio
         
-        # Run all three generation tasks in parallel
+        # Run all four generation tasks in parallel
         results = await asyncio.gather(
             SummaryService.generate_short_summary(title, abstract),
             SummaryService.generate_detailed_summary(title, abstract, full_text_excerpt),
             SummaryService.extract_key_findings(title, abstract, full_text_excerpt),
+            SummaryService.generate_eli5_summary(title, abstract),
             return_exceptions=True
         )
         
@@ -252,8 +310,9 @@ Key Findings:"""
         short_summary = results[0] if not isinstance(results[0], Exception) else None
         detailed_summary = results[1] if not isinstance(results[1], Exception) else None
         key_findings = results[2] if not isinstance(results[2], Exception) else None
+        eli5_summary = results[3] if not isinstance(results[3], Exception) else None
         
-        return short_summary, detailed_summary, key_findings
+        return short_summary, detailed_summary, key_findings, eli5_summary
 
 
 # Convenience functions
@@ -265,14 +324,15 @@ async def generate_paper_summary(
     """
     Generate all summaries for a paper.
     
-    Returns dict with keys: short_summary, detailed_summary, key_findings
+    Returns dict with keys: short_summary, detailed_summary, key_findings, eli5_summary
     """
-    short, detailed, findings = await SummaryService.generate_complete_summary(
+    short, detailed, findings, eli5 = await SummaryService.generate_complete_summary(
         title, abstract, full_text_excerpt
     )
     
     return {
         "short_summary": short,
         "detailed_summary": detailed,
-        "key_findings": findings
+        "key_findings": findings,
+        "eli5_summary": eli5
     }

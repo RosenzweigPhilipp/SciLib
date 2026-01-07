@@ -74,6 +74,7 @@ class Paper(BaseModel):
     # AI Summary fields
     ai_summary_short: Optional[str] = None
     ai_summary_long: Optional[str] = None
+    ai_summary_eli5: Optional[str] = None
     ai_key_findings: Optional[List[str]] = None
     summary_generated_at: Optional[datetime] = None
     summary_generation_method: Optional[str] = None

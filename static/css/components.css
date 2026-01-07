@@ -1038,6 +1038,29 @@
     color: #333;
 }
 
+/* ELI5 Summary Styling */
+.tab-pane .eli5-summary {
+    background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border-left: 4px solid #ffc107;
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: #5d4e37;
+    position: relative;
+}
+
+.tab-pane .eli5-summary::before {
+    content: "🧒";
+    position: absolute;
+    top: -10px;
+    left: 15px;
+    font-size: 1.5rem;
+    background: white;
+    padding: 0 5px;
+    border-radius: 50%;
+}
+
 .summary-action {
     margin: 1.5rem 0;
     text-align: center;
