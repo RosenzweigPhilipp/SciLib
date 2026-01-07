@@ -738,8 +738,8 @@ class PaperManager {
                         <button class="tab-btn active" onclick="window.paperManager.switchTab(event, 'abstract-tab')">Abstract</button>
                         <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'summary-long-tab')">Detailed Summary</button>
                         <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'summary-short-tab')">Short Summary</button>
-                        <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'findings-tab')">Key Findings</button>
                         <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'eli5-tab')">ELI5</button>
+                        <button class="tab-btn" onclick="window.paperManager.switchTab(event, 'findings-tab')">Key Findings</button>
                     </div>
                     <div class="tabs-content">
                         <div id="abstract-tab" class="tab-pane active">
@@ -751,11 +751,11 @@ class PaperManager {
                         <div id="summary-short-tab" class="tab-pane">
                             ${paper.ai_summary_short ? `<p>${Utils.sanitizeHtml(paper.ai_summary_short)}</p>` : '<p class="empty-message">No short summary available yet</p>'}
                         </div>
-                        <div id="findings-tab" class="tab-pane">
-                            ${this.generateKeyFindingsContent(paper)}
-                        </div>
                         <div id="eli5-tab" class="tab-pane">
                             ${paper.ai_summary_eli5 ? `<p class="eli5-summary">${Utils.sanitizeHtml(paper.ai_summary_eli5)}</p>` : '<p class="empty-message">No ELI5 summary available yet</p>'}
+                        </div>
+                        <div id="findings-tab" class="tab-pane">
+                            ${this.generateKeyFindingsContent(paper)}
                         </div>
                     </div>
                 </div>
