@@ -482,6 +482,12 @@ class PaperManager {
         const paperEditForm = document.getElementById('paper-edit-form');
         if (paperEditForm) paperEditForm.addEventListener('submit', (e) => { e.preventDefault(); this.savePaper(); });
 
+        // Publication type change handler
+        const publicationTypeSelect = document.getElementById('paper-edit-publication-type');
+        if (publicationTypeSelect) {
+            publicationTypeSelect.addEventListener('change', (e) => this.updateFieldVisibility(e.target.value));
+        }
+
         // Clear all papers button
         const clearBtn = document.getElementById('clear-papers-btn');
         if (clearBtn) {
@@ -1617,10 +1623,52 @@ class PaperManager {
         }, pollInterval);
     }
 
+    /**
+     * Update form field visibility based on publication type
+     */
+    updateFieldVisibility(publicationType) {
+        const form = document.getElementById('paper-edit-form');
+        if (!form) return;
+
+        // Get all elements with data-types attribute
+        const conditionalFields = form.querySelectorAll('[data-types]');
+        
+        conditionalFields.forEach(field => {
+            const allowedTypes = field.dataset.types.split(',');
+            if (allowedTypes.includes(publicationType)) {
+                field.style.display = '';
+                // Update label text based on type
+                const labels = field.querySelectorAll('label > span[class*="label-"]');
+                labels.forEach(label => {
+                    const labelTypes = label.className.split(' ')
+                        .filter(c => c.startsWith('label-'))
+                        .map(c => c.replace('label-', ''));
+                    label.style.display = labelTypes.includes(publicationType) ? '' : 'none';
+                });
+            } else {
+                field.style.display = 'none';
+            }
+        });
+
+        // Also handle the form-row container for volume/issue/pages
+        const volumeRow = form.querySelector('.field-volume-issue-pages');
+        if (volumeRow) {
+            const allowedTypes = volumeRow.dataset.types.split(',');
+            volumeRow.style.display = allowedTypes.includes(publicationType) ? '' : 'none';
+        }
+    }
+
     async editPaper(paperId) {
         try {
             const paper = await API.papers.get(paperId);
             this.currentEditingId = paperId;
+            
+            // Set publication type first (to trigger field visibility)
+            const pubTypeSelect = document.getElementById('paper-edit-publication-type');
+            if (pubTypeSelect) {
+                pubTypeSelect.value = paper.publication_type || 'article';
+                this.updateFieldVisibility(paper.publication_type || 'article');
+            }
             
             // Fill the form with paper data
             document.getElementById('paper-edit-title-input').value = paper.title || '';
@@ -1637,6 +1685,18 @@ class PaperManager {
             document.getElementById('paper-edit-isbn').value = paper.isbn || '';
             document.getElementById('paper-edit-abstract').value = paper.abstract || '';
             document.getElementById('paper-edit-keywords').value = paper.keywords || '';
+            
+            // New fields
+            const editionEl = document.getElementById('paper-edit-edition');
+            if (editionEl) editionEl.value = paper.edition || '';
+            const seriesEl = document.getElementById('paper-edit-series');
+            if (seriesEl) seriesEl.value = paper.series || '';
+            const chapterEl = document.getElementById('paper-edit-chapter');
+            if (chapterEl) chapterEl.value = paper.chapter || '';
+            const institutionEl = document.getElementById('paper-edit-institution');
+            if (institutionEl) institutionEl.value = paper.institution || '';
+            const reportNumberEl = document.getElementById('paper-edit-report-number');
+            if (reportNumberEl) reportNumberEl.value = paper.report_number || '';
             
             UIComponents.showModal('paper-edit-modal');
         } catch (error) {
@@ -1650,6 +1710,13 @@ class PaperManager {
             const paper = await API.papers.get(paperId);
             this.currentEditingId = paperId;
             
+            // Set publication type first (to trigger field visibility)
+            const pubTypeSelect = document.getElementById('paper-edit-publication-type');
+            if (pubTypeSelect) {
+                pubTypeSelect.value = paper.publication_type || 'article';
+                this.updateFieldVisibility(paper.publication_type || 'article');
+            }
+            
             // Fill the form with paper data
             document.getElementById('paper-edit-title-input').value = paper.title || '';
             document.getElementById('paper-edit-authors').value = paper.authors || '';
@@ -1665,6 +1732,18 @@ class PaperManager {
             document.getElementById('paper-edit-isbn').value = paper.isbn || '';
             document.getElementById('paper-edit-abstract').value = paper.abstract || '';
             document.getElementById('paper-edit-keywords').value = paper.keywords || '';
+            
+            // New fields
+            const editionEl = document.getElementById('paper-edit-edition');
+            if (editionEl) editionEl.value = paper.edition || '';
+            const seriesEl = document.getElementById('paper-edit-series');
+            if (seriesEl) seriesEl.value = paper.series || '';
+            const chapterEl = document.getElementById('paper-edit-chapter');
+            if (chapterEl) chapterEl.value = paper.chapter || '';
+            const institutionEl = document.getElementById('paper-edit-institution');
+            if (institutionEl) institutionEl.value = paper.institution || '';
+            const reportNumberEl = document.getElementById('paper-edit-report-number');
+            if (reportNumberEl) reportNumberEl.value = paper.report_number || '';
             
             // Show extraction status banner if processing
             const modal = document.getElementById('paper-edit-modal');
@@ -1917,21 +1996,34 @@ class PaperManager {
             return;
         }
 
+        // Helper to get element value safely
+        const getValue = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() || null : null;
+        };
+
         const data = {
             title: title,
             authors: authors,
+            publication_type: getValue('paper-edit-publication-type') || 'article',
             year: document.getElementById('paper-edit-year').value ? parseInt(document.getElementById('paper-edit-year').value) : null,
-            journal: document.getElementById('paper-edit-journal').value.trim() || null,
-            publisher: document.getElementById('paper-edit-publisher').value.trim() || null,
-            booktitle: document.getElementById('paper-edit-booktitle').value.trim() || null,
-            volume: document.getElementById('paper-edit-volume').value.trim() || null,
-            issue: document.getElementById('paper-edit-issue').value.trim() || null,
-            pages: document.getElementById('paper-edit-pages').value.trim() || null,
-            doi: document.getElementById('paper-edit-doi').value.trim() || null,
-            url: document.getElementById('paper-edit-url').value.trim() || null,
-            isbn: document.getElementById('paper-edit-isbn').value.trim() || null,
-            abstract: document.getElementById('paper-edit-abstract').value.trim() || null,
-            keywords: document.getElementById('paper-edit-keywords').value.trim() || null
+            journal: getValue('paper-edit-journal'),
+            publisher: getValue('paper-edit-publisher'),
+            booktitle: getValue('paper-edit-booktitle'),
+            volume: getValue('paper-edit-volume'),
+            issue: getValue('paper-edit-issue'),
+            pages: getValue('paper-edit-pages'),
+            doi: getValue('paper-edit-doi'),
+            url: getValue('paper-edit-url'),
+            isbn: getValue('paper-edit-isbn'),
+            abstract: getValue('paper-edit-abstract'),
+            keywords: getValue('paper-edit-keywords'),
+            // Publication-type specific fields
+            edition: getValue('paper-edit-edition'),
+            series: getValue('paper-edit-series'),
+            chapter: getValue('paper-edit-chapter'),
+            institution: getValue('paper-edit-institution'),
+            report_number: getValue('paper-edit-report-number')
         };
 
         try {

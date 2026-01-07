@@ -39,6 +39,9 @@ class UIComponents {
         // Generate AI extraction status badge
         const aiStatus = UIComponents.getAIStatusBadge(paper);
         
+        // Generate publication type badge
+        const pubTypeBadge = UIComponents.getPublicationTypeBadge(paper.publication_type);
+        
         // Generate collection badges
         let collectionBadges = '';
         if (paper.collections && paper.collections.length > 0) {
@@ -64,6 +67,7 @@ class UIComponents {
             ${paper.abstract ? `<div class="paper-abstract-preview">${Utils.truncateText(paper.abstract)}</div>` : ''}
             <div class="paper-meta">
                 <div>
+                    ${pubTypeBadge}
                     ${paper.year ? `<span class="year">${paper.year}</span>` : ''}
                     ${paper.journal ? `<span class="journal">${Utils.sanitizeHtml(paper.journal)}</span>` : ''}
                     ${paper.extraction_confidence ? `<span class="ai-confidence" title="AI Extraction Confidence">${Math.round(paper.extraction_confidence * 100)}% AI</span>` : ''}
@@ -82,6 +86,42 @@ class UIComponents {
             </div>
         `;
         return card;
+    }
+    
+    // Get publication type badge
+    static getPublicationTypeBadge(publicationType) {
+        if (!publicationType) return '';
+        
+        const typeLabels = {
+            'article': 'Article',
+            'inproceedings': 'Conference',
+            'book': 'Book',
+            'inbook': 'Book Chapter',
+            'incollection': 'Collection',
+            'phdthesis': 'PhD Thesis',
+            'mastersthesis': 'Master\'s Thesis',
+            'techreport': 'Tech Report',
+            'misc': 'Other'
+        };
+        
+        const typeIcons = {
+            'article': 'fa-file-alt',
+            'inproceedings': 'fa-users',
+            'book': 'fa-book',
+            'inbook': 'fa-bookmark',
+            'incollection': 'fa-layer-group',
+            'phdthesis': 'fa-graduation-cap',
+            'mastersthesis': 'fa-user-graduate',
+            'techreport': 'fa-file-code',
+            'misc': 'fa-file'
+        };
+        
+        const label = typeLabels[publicationType] || publicationType;
+        const icon = typeIcons[publicationType] || 'fa-file';
+        
+        return `<span class="paper-type-badge ${publicationType}" title="${label}">
+            <i class="fas ${icon}"></i> ${label}
+        </span>`;
     }
 
     // Get AI extraction status badge

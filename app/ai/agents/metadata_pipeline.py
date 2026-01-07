@@ -889,7 +889,8 @@ If information is not clearly available, use null for that field."""
         # Define all fields to merge (basic + extended BibTeX)
         basic_fields = ["authors", "abstract", "year", "journal", "doi", "url", "keywords"]
         extended_fields = ["publisher", "volume", "issue", "pages", "booktitle", "series", 
-                          "edition", "isbn", "month", "note", "publication_type"]
+                          "edition", "chapter", "isbn", "month", "note", "institution", 
+                          "report_number", "publication_type"]
         all_fields = basic_fields + extended_fields
         
         for source in all_sources:
@@ -1234,21 +1235,91 @@ If information is not clearly available, use null for that field."""
         return metadata
     
     def _determine_bibtex_type(self, metadata: Dict) -> str:
-        """Determine BibTeX entry type."""
+        """
+        Determine BibTeX entry type based on metadata fields.
         
+        Supported BibTeX types:
+        - article: Journal articles
+        - inproceedings: Conference papers
+        - book: Complete books
+        - inbook: Chapter/section of a book with pages
+        - incollection: Part of a book with its own title (edited volume)
+        - phdthesis: PhD dissertation
+        - mastersthesis: Master's thesis
+        - techreport: Technical report
+        - misc: Anything else (arXiv, working papers, etc.)
+        """
+        
+        title = (metadata.get("title") or "").lower()
         journal = (metadata.get("journal") or "").lower()
+        booktitle = (metadata.get("booktitle") or "").lower()
+        publisher = (metadata.get("publisher") or "").lower()
+        url = (metadata.get("url") or "").lower()
+        doi = (metadata.get("doi") or "").lower()
         
-        # Conference patterns
+        # Check for thesis indicators
+        thesis_keywords = ["thesis", "dissertation", "doctoral", "phd"]
+        masters_keywords = ["master", "msc", "m.sc", "ma thesis", "mphil"]
+        
+        if any(kw in title for kw in thesis_keywords + masters_keywords):
+            if any(kw in title for kw in ["phd", "doctoral", "ph.d"]):
+                return "phdthesis"
+            elif any(kw in title for kw in masters_keywords):
+                return "mastersthesis"
+            return "phdthesis"  # Default to PhD if unspecified
+        
+        # Check for technical report
+        report_keywords = ["technical report", "tech report", "report no", "technical note", "working paper"]
+        if any(kw in title.lower() for kw in report_keywords) or metadata.get("report_number"):
+            return "techreport"
+        
+        # Check for book
+        book_patterns = ["book", "monograph", "textbook", "handbook", "manual", "guide"]
+        if metadata.get("isbn") and not booktitle:
+            # Has ISBN and no booktitle → likely a complete book
+            if metadata.get("chapter") or metadata.get("pages"):
+                return "inbook"  # Chapter/section of a book
+            return "book"
+        
+        if any(pattern in title for pattern in book_patterns) and publisher:
+            return "book"
+        
+        # Check for inbook/incollection (part of book)
+        if booktitle and not journal:
+            # Has booktitle → part of a larger work
+            if any(pattern in booktitle for pattern in ["handbook", "encyclopedia", "collection", "edited"]):
+                return "incollection"
+            # Conference proceedings
+            if any(pattern in booktitle for pattern in [
+                "conference", "proceedings", "workshop", "symposium", 
+                "ieee", "acm", "icml", "neurips", "nips", "cvpr", "iccv", "eccv", "aaai",
+                "international", "annual meeting", "congress"
+            ]):
+                return "inproceedings"
+            # Default to incollection if booktitle present but not clearly conference
+            return "incollection"
+        
+        # Conference patterns in journal field (common misuse)
         if any(pattern in journal for pattern in [
-            "conference", "proceedings", "workshop", "symposium", "ieee", "acm"
+            "conference", "proceedings", "workshop", "symposium", "ieee", "acm",
+            "international", "annual"
         ]):
             return "inproceedings"
         
         # arXiv preprints
-        if "arxiv" in journal or (metadata.get("url", "") or "").find("arxiv") != -1:
+        if "arxiv" in journal or "arxiv" in url or "arxiv" in doi:
             return "misc"
         
-        return "article"
+        # bioRxiv, medRxiv preprints
+        if any(preprint in url or preprint in doi for preprint in ["biorxiv", "medrxiv", "ssrn"]):
+            return "misc"
+        
+        # Has journal → article
+        if journal:
+            return "article"
+        
+        # Default to misc if nothing matches
+        return "misc"
     
     def _calculate_confidence(self, metadata: Dict, search_results: Dict, validation_result: Dict, llm_used: bool = False, doi_used: bool = False) -> float:
         """

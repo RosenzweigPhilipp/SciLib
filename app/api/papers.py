@@ -58,10 +58,13 @@ class Paper(BaseModel):
     booktitle: Optional[str] = None
     series: Optional[str] = None
     edition: Optional[str] = None
+    chapter: Optional[str] = None
     isbn: Optional[str] = None
     url: Optional[str] = None
     month: Optional[int] = None
     note: Optional[str] = None
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
     publication_type: Optional[str] = None
     
     # AI Extraction fields
@@ -107,10 +110,13 @@ class PaperCreate(BaseModel):
     booktitle: Optional[str] = None
     series: Optional[str] = None
     edition: Optional[str] = None
+    chapter: Optional[str] = None
     isbn: Optional[str] = None
     url: Optional[str] = None
     month: Optional[int] = None
     note: Optional[str] = None
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
     publication_type: Optional[str] = None
 
 
@@ -129,10 +135,13 @@ class PaperUpdate(BaseModel):
     booktitle: Optional[str] = None
     series: Optional[str] = None
     edition: Optional[str] = None
+    chapter: Optional[str] = None
     isbn: Optional[str] = None
     url: Optional[str] = None
     month: Optional[int] = None
     note: Optional[str] = None
+    institution: Optional[str] = None
+    report_number: Optional[str] = None
     publication_type: Optional[str] = None
 
 
@@ -708,7 +717,7 @@ async def get_paper_bibtex(
                 # For title, wrap in double braces to preserve capitalization
                 if key == "title":
                     bibtex_lines.append(f"  {key} = {{{{{value_str}}}}},")
-                elif key in ["volume", "issue", "year", "month"]:
+                elif key in ["volume", "issue", "year", "month", "chapter"]:
                     # Numeric fields don't need braces
                     bibtex_lines.append(f"  {key} = {value_str},")
                 else:
@@ -722,23 +731,57 @@ async def get_paper_bibtex(
     add_field("year", paper.year)
     add_field("month", paper.month)
     
-    # Entry-specific fields
+    # Entry-specific fields based on BibTeX standard
     if entry_type == "article":
-        add_field("journal", paper.journal)
+        add_field("journal", paper.journal, required=True)
         add_field("volume", paper.volume)
         add_field("number", paper.issue)  # BibTeX uses "number" for issue
         add_field("pages", paper.pages)
         add_field("publisher", paper.publisher)
     elif entry_type in ["inproceedings", "conference"]:
-        add_field("booktitle", paper.booktitle or paper.journal)
+        add_field("booktitle", paper.booktitle or paper.journal, required=True)
         add_field("pages", paper.pages)
         add_field("publisher", paper.publisher)
         add_field("series", paper.series)
-    elif entry_type in ["book", "inbook"]:
-        add_field("publisher", paper.publisher)
+        add_field("volume", paper.volume)
+    elif entry_type == "book":
+        add_field("publisher", paper.publisher, required=True)
         add_field("edition", paper.edition)
-        add_field("isbn", paper.isbn)
+        add_field("volume", paper.volume)
         add_field("series", paper.series)
+        add_field("isbn", paper.isbn)
+    elif entry_type == "inbook":
+        add_field("chapter", paper.chapter)
+        add_field("pages", paper.pages)
+        add_field("publisher", paper.publisher, required=True)
+        add_field("edition", paper.edition)
+        add_field("volume", paper.volume)
+        add_field("series", paper.series)
+        add_field("isbn", paper.isbn)
+    elif entry_type == "incollection":
+        add_field("booktitle", paper.booktitle, required=True)
+        add_field("chapter", paper.chapter)
+        add_field("pages", paper.pages)
+        add_field("publisher", paper.publisher, required=True)
+        add_field("edition", paper.edition)
+        add_field("series", paper.series)
+    elif entry_type == "phdthesis":
+        add_field("school", paper.institution or paper.publisher, required=True)
+        add_field("type", "PhD Thesis")
+    elif entry_type == "mastersthesis":
+        add_field("school", paper.institution or paper.publisher, required=True)
+        add_field("type", "Master's Thesis")
+    elif entry_type == "techreport":
+        add_field("institution", paper.institution or paper.publisher, required=True)
+        add_field("number", paper.report_number or paper.issue)
+        add_field("type", "Technical Report")
+    elif entry_type == "misc":
+        # Misc can have almost any fields
+        if paper.journal:
+            add_field("howpublished", paper.journal)
+        if paper.booktitle:
+            add_field("howpublished", paper.booktitle)
+        add_field("publisher", paper.publisher)
     
     # Common optional fields
     add_field("doi", paper.doi)

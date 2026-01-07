@@ -317,6 +317,23 @@
             </div>
             <div class="modal-body">
                 <form id="paper-edit-form">
+                    <!-- Publication Type Selector -->
+                    <div class="form-group publication-type-selector">
+                        <label for="paper-edit-publication-type">Publication Type</label>
+                        <select id="paper-edit-publication-type">
+                            <option value="article">Journal Article</option>
+                            <option value="inproceedings">Conference Paper</option>
+                            <option value="book">Book</option>
+                            <option value="inbook">Book Chapter</option>
+                            <option value="incollection">Collection Chapter</option>
+                            <option value="phdthesis">PhD Thesis</option>
+                            <option value="mastersthesis">Master's Thesis</option>
+                            <option value="techreport">Technical Report</option>
+                            <option value="misc">Other/Misc</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Common fields for all types -->
                     <div class="form-group">
                         <label for="paper-edit-title-input">Title</label>
                         <input type="text" id="paper-edit-title-input" required>
@@ -329,24 +346,44 @@
                         <label for="paper-edit-year">Year</label>
                         <input type="number" id="paper-edit-year" min="1900" max="2030">
                     </div>
-                    <div class="form-group">
-                        <label for="paper-edit-journal">Journal/Venue</label>
+                    
+                    <!-- Journal field (article) -->
+                    <div class="form-group field-journal" data-types="article">
+                        <label for="paper-edit-journal">Journal</label>
                         <input type="text" id="paper-edit-journal">
                     </div>
-                    <div class="form-group">
+                    
+                    <!-- Conference/Book title (inproceedings, inbook, incollection) -->
+                    <div class="form-group field-booktitle" data-types="inproceedings,inbook,incollection">
+                        <label for="paper-edit-booktitle">
+                            <span class="label-inproceedings">Conference Name</span>
+                            <span class="label-inbook label-incollection">Book Title</span>
+                        </label>
+                        <input type="text" id="paper-edit-booktitle">
+                    </div>
+                    
+                    <!-- Publisher (book, inbook, incollection, techreport) -->
+                    <div class="form-group field-publisher" data-types="book,inbook,incollection,inproceedings">
                         <label for="paper-edit-publisher">Publisher</label>
                         <input type="text" id="paper-edit-publisher">
                     </div>
-                    <div class="form-group">
-                        <label for="paper-edit-booktitle">Conference/Book Title</label>
-                        <input type="text" id="paper-edit-booktitle">
+                    
+                    <!-- Institution/School (thesis, techreport) -->
+                    <div class="form-group field-institution" data-types="phdthesis,mastersthesis,techreport">
+                        <label for="paper-edit-institution">
+                            <span class="label-phdthesis label-mastersthesis">University/School</span>
+                            <span class="label-techreport">Institution</span>
+                        </label>
+                        <input type="text" id="paper-edit-institution">
                     </div>
-                    <div class="form-row">
+                    
+                    <!-- Volume, Issue, Pages row (article, inproceedings) -->
+                    <div class="form-row field-volume-issue-pages" data-types="article,inproceedings,book,inbook,incollection">
                         <div class="form-group" style="flex: 1;">
                             <label for="paper-edit-volume">Volume</label>
                             <input type="text" id="paper-edit-volume">
                         </div>
-                        <div class="form-group" style="flex: 1;">
+                        <div class="form-group field-issue" style="flex: 1;" data-types="article">
                             <label for="paper-edit-issue">Issue</label>
                             <input type="text" id="paper-edit-issue">
                         </div>
@@ -355,6 +392,32 @@
                             <input type="text" id="paper-edit-pages" placeholder="e.g. 123-145">
                         </div>
                     </div>
+                    
+                    <!-- Edition (book, inbook) -->
+                    <div class="form-group field-edition" data-types="book,inbook,incollection">
+                        <label for="paper-edit-edition">Edition</label>
+                        <input type="text" id="paper-edit-edition" placeholder="e.g. 2nd">
+                    </div>
+                    
+                    <!-- Series (book, inproceedings) -->
+                    <div class="form-group field-series" data-types="book,inbook,incollection,inproceedings">
+                        <label for="paper-edit-series">Series</label>
+                        <input type="text" id="paper-edit-series">
+                    </div>
+                    
+                    <!-- Chapter (inbook) -->
+                    <div class="form-group field-chapter" data-types="inbook">
+                        <label for="paper-edit-chapter">Chapter</label>
+                        <input type="text" id="paper-edit-chapter">
+                    </div>
+                    
+                    <!-- Report Number/Type (techreport) -->
+                    <div class="form-group field-report-number" data-types="techreport">
+                        <label for="paper-edit-report-number">Report Number</label>
+                        <input type="text" id="paper-edit-report-number">
+                    </div>
+                    
+                    <!-- Common identifiers -->
                     <div class="form-group">
                         <label for="paper-edit-doi">DOI</label>
                         <input type="text" id="paper-edit-doi">
@@ -363,10 +426,13 @@
                         <label for="paper-edit-url">URL</label>
                         <input type="url" id="paper-edit-url">
                     </div>
-                    <div class="form-group">
+                    
+                    <!-- ISBN (book, inbook, incollection) -->
+                    <div class="form-group field-isbn" data-types="book,inbook,incollection">
                         <label for="paper-edit-isbn">ISBN</label>
                         <input type="text" id="paper-edit-isbn">
                     </div>
+                    
                     <div class="form-group">
                         <label for="paper-edit-abstract">Abstract</label>
                         <textarea id="paper-edit-abstract" rows="4"></textarea>

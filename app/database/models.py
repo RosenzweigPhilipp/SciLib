@@ -44,10 +44,13 @@ class Paper(Base):
     booktitle = Column(String(500))           # Conference/book title
     series = Column(String(255))              # Series name
     edition = Column(String(50))              # Edition (for books)
+    chapter = Column(String(100))             # Chapter number/title (for inbook/incollection)
     isbn = Column(String(50))                 # ISBN (for books)
     url = Column(String(500))                 # Canonical URL
     month = Column(Integer)                   # Publication month (1-12)
     note = Column(Text)                       # Additional notes
+    institution = Column(String(255))         # Institution (for techreport, thesis)
+    report_number = Column(String(100))       # Report/tech report number
     publication_type = Column(String(50))     # article, inproceedings, book, etc.
     
     # AI Extraction fields
