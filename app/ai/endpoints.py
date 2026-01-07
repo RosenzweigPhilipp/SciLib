@@ -149,7 +149,7 @@ async def get_extraction_results(
 async def get_similar_papers(
     paper_id: int,
     limit: int = Query(default=10, ge=1, le=50),
-    min_score: float = Query(default=0.5, ge=0.0, le=1.0),
+    min_score: float = Query(default=0.4, ge=0.0, le=1.0),
     refresh: bool = Query(default=False, description="Force refresh similarity search"),
     db: Session = Depends(get_db),
     _: str = Depends(verify_api_key)

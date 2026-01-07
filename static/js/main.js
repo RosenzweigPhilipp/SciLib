@@ -1185,7 +1185,7 @@ class PaperManager {
         
         try {
             // Fetch similar papers from API
-            const response = await API.request(`/ai/paper/${paper.id}/similar?limit=5&min_score=0.5`);
+            const response = await API.request(`/ai/paper/${paper.id}/similar?limit=5&min_score=0.4`);
             
             if (!response.similar_papers || response.similar_papers.length === 0) {
                 // Check if API returned a message explaining why
@@ -1269,7 +1269,7 @@ class PaperManager {
         
         try {
             // Force refresh
-            const response = await API.request(`/ai/paper/${paperId}/similar?limit=5&min_score=0.5&refresh=true`);
+            const response = await API.request(`/ai/paper/${paperId}/similar?limit=5&min_score=0.4&refresh=true`);
             
             // Re-initialize the section with fresh data
             const paper = await API.papers.get(paperId);
