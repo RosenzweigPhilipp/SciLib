@@ -136,8 +136,8 @@ class API {
             return API.request(`/papers/${id}`, {
                 method: 'DELETE',
             });
-        }
-        ,
+        },
+
         async clear() {
             return API.request('/papers/clear-all', { method: 'DELETE' });
         },
