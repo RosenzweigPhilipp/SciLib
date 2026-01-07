@@ -214,6 +214,104 @@ async def upload_paper(file: UploadFile = File(...), db: Session = Depends(get_d
     }
 
 
+@router.post("/upload-batch", status_code=status.HTTP_201_CREATED)
+async def upload_papers_batch(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+    """
+    Upload multiple paper PDFs in a batch.
+    
+    Returns a list of results for each file, including paper data and task IDs
+    for parallel metadata extraction.
+    """
+    results = []
+    
+    # Create upload directory if it doesn't exist
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    
+    for file in files:
+        result = {
+            "filename": file.filename,
+            "success": False,
+            "paper": None,
+            "task_id": None,
+            "error": None
+        }
+        
+        # Validate file type
+        if not file.filename.endswith('.pdf'):
+            result["error"] = "Only PDF files are allowed"
+            results.append(result)
+            continue
+        
+        # Save the uploaded file
+        file_path = os.path.join(settings.upload_dir, file.filename)
+        
+        try:
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+        except Exception as e:
+            result["error"] = f"Failed to save file: {str(e)}"
+            results.append(result)
+            continue
+        
+        # Create paper record in database
+        try:
+            paper = PaperModel(
+                title=file.filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ').title(),
+                authors="Unknown Authors",
+                file_path=file_path,
+                extraction_status="pending",
+                extraction_confidence=0.0
+            )
+            
+            db.add(paper)
+            db.commit()
+            db.refresh(paper)
+            
+            result["success"] = True
+            result["paper"] = {
+                "id": paper.id,
+                "title": paper.title,
+                "authors": paper.authors,
+                "file_path": paper.file_path,
+                "extraction_status": paper.extraction_status
+            }
+            
+            # Trigger AI metadata extraction task if available
+            if extract_pdf_metadata_task:
+                try:
+                    task = extract_pdf_metadata_task.delay(
+                        pdf_path=file_path,
+                        paper_id=paper.id
+                    )
+                    result["task_id"] = task.id
+                    print(f"DEBUG: Started AI extraction task {task.id} for paper {paper.id}")
+                    
+                    # Mark paper as processing
+                    paper.extraction_status = "processing"
+                    db.add(paper)
+                    db.commit()
+                except Exception as e:
+                    print(f"DEBUG: Failed to start AI extraction task: {e}")
+                    result["error"] = f"Upload succeeded but extraction task failed: {str(e)}"
+            
+        except Exception as e:
+            result["error"] = f"Failed to create paper record: {str(e)}"
+            # Clean up the file if database insert failed
+            try:
+                os.remove(file_path)
+            except:
+                pass
+        
+        results.append(result)
+    
+    return {
+        "total": len(files),
+        "successful": sum(1 for r in results if r["success"]),
+        "failed": sum(1 for r in results if not r["success"]),
+        "results": results
+    }
+
+
 @router.get("/", response_model=List[Paper])
 async def list_papers(
     skip: int = Query(0, ge=0),

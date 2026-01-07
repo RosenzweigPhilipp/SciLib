@@ -1582,3 +1582,150 @@ input:checked + .toggle-slider:before {
     background-color: #f5f5f5;
     color: #616161;
 }
+
+/* Batch Upload Modal Styles */
+.batch-summary {
+    display: flex;
+    justify-content: space-around;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.batch-stat {
+    text-align: center;
+    padding: 0.5rem 1rem;
+}
+
+.batch-stat .stat-value {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.batch-stat .stat-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.batch-stat.success .stat-value {
+    color: #28a745;
+}
+
+.batch-stat.error .stat-value {
+    color: #dc3545;
+}
+
+.batch-progress-bar {
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.batch-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff, #28a745);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+.batch-files-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+}
+
+.batch-file-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.2s ease;
+}
+
+.batch-file-item:last-child {
+    border-bottom: none;
+}
+
+.batch-file-item:hover {
+    background-color: #f8f9fa;
+}
+
+.batch-file-item.completed {
+    background-color: #d4edda;
+}
+
+.batch-file-item.failed {
+    background-color: #f8d7da;
+}
+
+.batch-file-item.extracting {
+    background-color: #fff3cd;
+}
+
+.batch-file-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #e9ecef;
+    border-radius: 8px;
+    margin-right: 1rem;
+    font-size: 1.25rem;
+    color: #dc3545;
+}
+
+.batch-file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.batch-file-name {
+    font-weight: 500;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.25rem;
+}
+
+.batch-file-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.batch-file-status .status-icon {
+    font-size: 0.9rem;
+}
+
+.batch-file-status .status-icon.success {
+    color: #28a745;
+}
+
+.batch-file-status .status-icon.error {
+    color: #dc3545;
+}
+
+.batch-file-status .status-icon.extracting {
+    color: #ffc107;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}

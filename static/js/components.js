@@ -234,8 +234,11 @@ class UIComponents {
 // Upload Manager
 class UploadManager {
     constructor() {
+        this.batchTasks = new Map(); // Track task_id -> { paperId, filename, status }
+        this.pollingInterval = null;
         try {
             this.setupUploadHandlers();
+            this.setupBatchModalHandlers();
         } catch (e) {
             console.error('UploadManager initialization failed', e);
         }
@@ -271,19 +274,36 @@ class UploadManager {
             uploadArea.addEventListener('drop', (e) => {
                 e.preventDefault();
                 uploadArea.classList.remove('dragover');
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
+                const files = Array.from(e.dataTransfer.files).filter(f => f.type.includes('pdf'));
+                if (files.length > 1) {
+                    this.handleBatchUpload(files);
+                } else if (files.length === 1) {
                     this.handleFileUpload(files[0]);
                 }
             });
         }
 
-        // File input change
+        // File input change - handle multiple files
         if (fileInput) fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                this.handleFileUpload(e.target.files[0]);
+            const files = Array.from(e.target.files);
+            if (files.length > 1) {
+                this.handleBatchUpload(files);
+            } else if (files.length === 1) {
+                this.handleFileUpload(files[0]);
             }
         });
+    }
+
+    setupBatchModalHandlers() {
+        const closeBtn = document.getElementById('batch-upload-close');
+        const doneBtn = document.getElementById('batch-upload-done');
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeBatchModal());
+        }
+        if (doneBtn) {
+            doneBtn.addEventListener('click', () => this.closeBatchModal());
+        }
     }
 
     async handleFileUpload(file) {
@@ -321,6 +341,244 @@ class UploadManager {
             this.hideUploadProgress();
             UIComponents.showNotification(`Upload failed: ${error.message}`, 'error');
         }
+    }
+
+    async handleBatchUpload(files) {
+        // Hide upload modal and show batch progress modal
+        UIComponents.hideModal('upload-modal');
+        this.showBatchModal(files);
+        
+        try {
+            // Upload all files at once
+            const result = await API.papers.uploadBatch(files);
+            
+            // Update the UI with results
+            this.updateBatchResults(result);
+            
+            // Start polling for extraction status
+            this.startBatchPolling(result.results);
+            
+            // Refresh papers list
+            if (window.paperManager) {
+                window.paperManager.loadPapers();
+            }
+            
+            // Refresh dashboard stats
+            if (window.dashboardManager) {
+                window.dashboardManager.loadStats();
+            }
+            
+        } catch (error) {
+            UIComponents.showNotification(`Batch upload failed: ${error.message}`, 'error');
+            this.updateBatchError(error.message);
+        }
+    }
+
+    showBatchModal(files) {
+        // Reset state
+        this.batchTasks.clear();
+        
+        // Update summary counts
+        document.getElementById('batch-total').textContent = files.length;
+        document.getElementById('batch-uploaded').textContent = '0';
+        document.getElementById('batch-extracting').textContent = '0';
+        document.getElementById('batch-completed').textContent = '0';
+        document.getElementById('batch-failed').textContent = '0';
+        
+        // Reset progress bar
+        document.getElementById('batch-progress-fill').style.width = '0%';
+        
+        // Create file list items
+        const filesList = document.getElementById('batch-files-list');
+        filesList.innerHTML = files.map((file, index) => `
+            <div class="batch-file-item" id="batch-file-${index}">
+                <div class="batch-file-icon">
+                    <i class="fas fa-file-pdf"></i>
+                </div>
+                <div class="batch-file-info">
+                    <div class="batch-file-name">${Utils.sanitizeHtml(file.name)}</div>
+                    <div class="batch-file-status">
+                        <span class="status-text">Uploading...</span>
+                        <i class="fas fa-spinner fa-spin status-icon"></i>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // Hide done button initially
+        document.getElementById('batch-upload-done').style.display = 'none';
+        
+        // Show modal
+        UIComponents.showModal('batch-upload-modal');
+    }
+
+    updateBatchResults(result) {
+        // Update uploaded count
+        document.getElementById('batch-uploaded').textContent = result.successful;
+        document.getElementById('batch-failed').textContent = result.failed;
+        
+        // Update progress bar for upload phase (50%)
+        const uploadProgress = (result.successful / result.total) * 50;
+        document.getElementById('batch-progress-fill').style.width = `${uploadProgress}%`;
+        
+        // Update each file item
+        result.results.forEach((fileResult, index) => {
+            const fileItem = document.getElementById(`batch-file-${index}`);
+            if (!fileItem) return;
+            
+            const statusText = fileItem.querySelector('.status-text');
+            const statusIcon = fileItem.querySelector('.status-icon');
+            
+            if (fileResult.success) {
+                if (fileResult.task_id) {
+                    // Track for polling
+                    this.batchTasks.set(fileResult.task_id, {
+                        paperId: fileResult.paper.id,
+                        filename: fileResult.filename,
+                        index: index,
+                        status: 'extracting'
+                    });
+                    
+                    statusText.textContent = 'Extracting metadata...';
+                    statusIcon.className = 'fas fa-cog fa-spin status-icon extracting';
+                    fileItem.classList.add('extracting');
+                } else {
+                    statusText.textContent = 'Uploaded (no extraction)';
+                    statusIcon.className = 'fas fa-check status-icon success';
+                    fileItem.classList.add('completed');
+                }
+            } else {
+                statusText.textContent = fileResult.error || 'Upload failed';
+                statusIcon.className = 'fas fa-times status-icon error';
+                fileItem.classList.add('failed');
+            }
+        });
+        
+        // Update extracting count
+        document.getElementById('batch-extracting').textContent = this.batchTasks.size;
+    }
+
+    updateBatchError(errorMessage) {
+        // Mark all as failed
+        const fileItems = document.querySelectorAll('.batch-file-item');
+        fileItems.forEach(item => {
+            const statusText = item.querySelector('.status-text');
+            const statusIcon = item.querySelector('.status-icon');
+            statusText.textContent = errorMessage;
+            statusIcon.className = 'fas fa-times status-icon error';
+            item.classList.add('failed');
+        });
+        
+        document.getElementById('batch-failed').textContent = fileItems.length;
+        document.getElementById('batch-upload-done').style.display = 'block';
+    }
+
+    startBatchPolling(results) {
+        // If no tasks to track, show done button
+        if (this.batchTasks.size === 0) {
+            document.getElementById('batch-upload-done').style.display = 'block';
+            document.getElementById('batch-progress-fill').style.width = '100%';
+            return;
+        }
+        
+        // Poll every 2 seconds
+        this.pollingInterval = setInterval(() => this.pollBatchStatus(), 2000);
+    }
+
+    async pollBatchStatus() {
+        let allComplete = true;
+        let completedCount = 0;
+        let failedCount = parseInt(document.getElementById('batch-failed').textContent) || 0;
+        
+        for (const [taskId, taskInfo] of this.batchTasks) {
+            if (taskInfo.status === 'completed' || taskInfo.status === 'failed') {
+                if (taskInfo.status === 'completed') completedCount++;
+                continue;
+            }
+            
+            try {
+                const status = await API.ai.getTaskStatus(taskId);
+                
+                const fileItem = document.getElementById(`batch-file-${taskInfo.index}`);
+                if (!fileItem) continue;
+                
+                const statusText = fileItem.querySelector('.status-text');
+                const statusIcon = fileItem.querySelector('.status-icon');
+                
+                if (status.state === 'SUCCESS') {
+                    taskInfo.status = 'completed';
+                    completedCount++;
+                    
+                    const confidence = status.result?.confidence || 0;
+                    statusText.textContent = `Completed (${Math.round(confidence * 100)}% confidence)`;
+                    statusIcon.className = 'fas fa-check status-icon success';
+                    fileItem.classList.remove('extracting');
+                    fileItem.classList.add('completed');
+                    
+                } else if (status.state === 'FAILURE') {
+                    taskInfo.status = 'failed';
+                    failedCount++;
+                    
+                    statusText.textContent = status.error || 'Extraction failed';
+                    statusIcon.className = 'fas fa-times status-icon error';
+                    fileItem.classList.remove('extracting');
+                    fileItem.classList.add('failed');
+                    
+                } else {
+                    // Still processing
+                    allComplete = false;
+                    if (status.progress) {
+                        statusText.textContent = `Extracting: ${status.progress}%`;
+                    }
+                }
+            } catch (error) {
+                console.error(`Error polling task ${taskId}:`, error);
+                allComplete = false;
+            }
+        }
+        
+        // Update counts
+        const extractingCount = Array.from(this.batchTasks.values())
+            .filter(t => t.status === 'extracting').length;
+        document.getElementById('batch-extracting').textContent = extractingCount;
+        document.getElementById('batch-completed').textContent = completedCount;
+        document.getElementById('batch-failed').textContent = failedCount;
+        
+        // Update progress bar (50% for upload + 50% for extraction)
+        const totalTasks = this.batchTasks.size;
+        const uploadedCount = parseInt(document.getElementById('batch-uploaded').textContent) || 0;
+        const totalFiles = parseInt(document.getElementById('batch-total').textContent) || 1;
+        const uploadProgress = (uploadedCount / totalFiles) * 50;
+        const extractionProgress = totalTasks > 0 ? (completedCount / totalTasks) * 50 : 50;
+        document.getElementById('batch-progress-fill').style.width = `${uploadProgress + extractionProgress}%`;
+        
+        // Check if all complete
+        if (allComplete || extractingCount === 0) {
+            this.stopBatchPolling();
+            document.getElementById('batch-upload-done').style.display = 'block';
+            document.getElementById('batch-progress-fill').style.width = '100%';
+            
+            // Refresh papers list to show updated metadata
+            if (window.paperManager) {
+                window.paperManager.loadPapers();
+            }
+        }
+    }
+
+    stopBatchPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+
+    closeBatchModal() {
+        this.stopBatchPolling();
+        UIComponents.hideModal('batch-upload-modal');
+        
+        // Clear file input
+        const fileInput = document.getElementById('file-input');
+        if (fileInput) fileInput.value = '';
     }
 
     showUploadProgress() {

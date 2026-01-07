@@ -113,6 +113,18 @@ class API {
             });
         },
 
+        async uploadBatch(files) {
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
+            
+            return API.request('/papers/upload-batch', {
+                method: 'POST',
+                body: formData,
+            });
+        },
+
         async update(id, data) {
             return API.request(`/papers/${id}`, {
                 method: 'PUT',
