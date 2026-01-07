@@ -164,6 +164,7 @@ async def get_similar_papers(
     - New papers have been added since last search
     """
     from .services.vector_search_service import find_similar_papers
+    from sqlalchemy import func
     
     paper = db.query(Paper).filter(Paper.id == paper_id).first()
     if not paper:
@@ -186,13 +187,17 @@ async def get_similar_papers(
             "cached_at": paper.similar_papers_updated_at.isoformat() if paper.similar_papers_updated_at else None
         }
     
+    # Check how many papers have embeddings
+    papers_with_embeddings = db.query(func.count(Paper.id)).filter(
+        Paper.embedding_title_abstract.isnot(None)
+    ).scalar()
+    
     # Check if paper has embedding
     if paper.embedding_title_abstract is None:
         # Try to generate embedding first
         logger.info(f"Paper {paper_id} has no embedding, attempting to generate...")
         try:
             from .services.embedding_service import EmbeddingService
-            import asyncio
             
             embedding = await EmbeddingService.generate_paper_embedding(
                 paper.title, 
@@ -203,19 +208,36 @@ async def get_similar_papers(
                 paper.embedding_generated_at = datetime.now()
                 db.commit()
                 logger.info(f"Generated embedding for paper {paper_id}")
+                papers_with_embeddings += 1  # We just added one
             else:
-                raise HTTPException(
-                    status_code=400, 
-                    detail="Cannot perform similarity search: paper has no embedding and generation failed"
-                )
-        except HTTPException:
-            raise
+                # Return empty results with explanation instead of error
+                return {
+                    "paper_id": paper_id,
+                    "similar_papers": [],
+                    "cached": False,
+                    "total": 0,
+                    "message": "Could not generate embedding for this paper. Make sure the paper has a title."
+                }
         except Exception as e:
             logger.error(f"Failed to generate embedding for paper {paper_id}: {e}")
-            raise HTTPException(
-                status_code=400, 
-                detail="Cannot perform similarity search: paper has no embedding"
-            )
+            return {
+                "paper_id": paper_id,
+                "similar_papers": [],
+                "cached": False,
+                "total": 0,
+                "message": f"Embedding generation failed: {str(e)}"
+            }
+    
+    # Check if there are enough other papers with embeddings
+    if papers_with_embeddings < 2:
+        logger.info(f"Not enough papers with embeddings ({papers_with_embeddings}) for similarity search")
+        return {
+            "paper_id": paper_id,
+            "similar_papers": [],
+            "cached": False,
+            "total": 0,
+            "message": f"Need at least 2 papers with embeddings for similarity search. Currently {papers_with_embeddings} paper(s) have embeddings. Generate summaries for more papers to enable similarity search."
+        }
     
     # Perform similarity search
     try:
@@ -272,3 +294,70 @@ async def refresh_similar_papers(
     except Exception as e:
         logger.error(f"Failed to start similarity search task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/embeddings/generate-all")
+async def generate_all_embeddings(
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    """
+    Generate embeddings for all papers that don't have them yet.
+    This is useful for enabling similarity search across the library.
+    """
+    from .services.embedding_service import EmbeddingService
+    from sqlalchemy import func
+    
+    # Get all papers without embeddings
+    papers_without_embeddings = db.query(Paper).filter(
+        Paper.embedding_title_abstract.is_(None),
+        Paper.title.isnot(None)  # Need title for embedding
+    ).all()
+    
+    if not papers_without_embeddings:
+        total_with_embeddings = db.query(func.count(Paper.id)).filter(
+            Paper.embedding_title_abstract.isnot(None)
+        ).scalar()
+        return {
+            "status": "complete",
+            "message": "All papers already have embeddings",
+            "total_with_embeddings": total_with_embeddings,
+            "generated": 0
+        }
+    
+    generated = 0
+    failed = 0
+    errors = []
+    
+    for paper in papers_without_embeddings:
+        try:
+            embedding = await EmbeddingService.generate_paper_embedding(
+                paper.title,
+                paper.abstract
+            )
+            if embedding:
+                paper.embedding_title_abstract = embedding
+                paper.embedding_generated_at = datetime.now()
+                generated += 1
+                logger.info(f"Generated embedding for paper {paper.id}: {paper.title[:50]}...")
+            else:
+                failed += 1
+                errors.append(f"Paper {paper.id}: No embedding generated")
+        except Exception as e:
+            failed += 1
+            errors.append(f"Paper {paper.id}: {str(e)}")
+            logger.error(f"Failed to generate embedding for paper {paper.id}: {e}")
+    
+    db.commit()
+    
+    total_with_embeddings = db.query(func.count(Paper.id)).filter(
+        Paper.embedding_title_abstract.isnot(None)
+    ).scalar()
+    
+    return {
+        "status": "complete",
+        "generated": generated,
+        "failed": failed,
+        "total_with_embeddings": total_with_embeddings,
+        "errors": errors[:10] if errors else []  # Return first 10 errors
+    }

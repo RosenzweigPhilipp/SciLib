@@ -1188,13 +1188,19 @@ class PaperManager {
             const response = await API.request(`/api/ai/paper/${paper.id}/similar?limit=5&min_score=0.5`);
             
             if (!response.similar_papers || response.similar_papers.length === 0) {
+                // Check if API returned a message explaining why
+                const message = response.message || 'No similar papers found in your library yet.';
+                const hint = response.message 
+                    ? '' 
+                    : '<p class="hint-text">Similar papers will appear here as you add more papers to your library.</p>';
+                
                 container.innerHTML = `
                     <div class="similar-papers-section">
                         <h4>
                             <i class="fas fa-project-diagram"></i> Similar Papers in Library
                         </h4>
-                        <p class="empty-message">No similar papers found in your library yet.</p>
-                        <p class="hint-text">Similar papers will appear here as you add more papers to your library.</p>
+                        <p class="empty-message">${Utils.sanitizeHtml(message)}</p>
+                        ${hint}
                     </div>
                 `;
                 return;
