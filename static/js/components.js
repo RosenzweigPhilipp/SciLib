@@ -512,7 +512,7 @@ class UploadManager {
             
             // Task still in progress, poll for status
             try {
-                const status = await API.ai.getTaskStatus(taskId);
+                const response = await API.ai.getTaskStatus(taskId);
                 
                 const fileItem = document.getElementById(`batch-file-${taskInfo.index}`);
                 if (!fileItem) continue;
@@ -520,31 +520,32 @@ class UploadManager {
                 const statusText = fileItem.querySelector('.status-text');
                 const statusIcon = fileItem.querySelector('.status-icon');
                 
-                if (status.state === 'SUCCESS') {
+                // API returns 'status' field with values: completed, failed, pending, processing
+                if (response.status === 'completed') {
                     taskInfo.status = 'completed';
                     completedCount++;
                     
-                    const confidence = status.result?.confidence || 0;
+                    const confidence = response.result?.confidence || 0;
                     statusText.textContent = `Completed (${Math.round(confidence * 100)}% confidence)`;
                     statusIcon.className = 'fas fa-check status-icon success';
                     fileItem.classList.remove('extracting');
                     fileItem.classList.add('completed');
                     
-                } else if (status.state === 'FAILURE') {
+                } else if (response.status === 'failed' || response.status === 'error') {
                     taskInfo.status = 'failed';
                     failedCount++;
                     
-                    statusText.textContent = status.error || 'Extraction failed';
+                    statusText.textContent = response.error || 'Extraction failed';
                     statusIcon.className = 'fas fa-times status-icon error';
                     fileItem.classList.remove('extracting');
                     fileItem.classList.add('failed');
                     
                 } else {
-                    // Still processing
+                    // Still processing (pending, processing, or other states)
                     allComplete = false;
                     extractingCount++;
-                    if (status.progress) {
-                        statusText.textContent = `Extracting: ${status.progress}%`;
+                    if (response.progress) {
+                        statusText.textContent = `Extracting: ${response.progress}%`;
                     }
                 }
             } catch (error) {
