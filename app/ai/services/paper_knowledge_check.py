@@ -97,7 +97,7 @@ Only respond with the JSON object, no other text."""
         """
         Generate comprehensive summaries using LLM's existing knowledge.
         
-        Returns dict with short_summary, long_summary, key_findings
+        Returns dict with short_summary, long_summary, key_findings, eli5_summary
         """
         paper_info = f"Title: {title}"
         if authors:
@@ -113,8 +113,9 @@ Please provide:
 1. A short summary (2-3 sentences)
 2. A detailed summary (1 paragraph, 5-7 sentences)
 3. 3-5 key findings as a list
+4. An ELI5 (Explain Like I'm 5) summary - explain the paper as if talking to a curious 5-year-old using very simple words, fun analogies to things kids know (toys, animals, games, food), short sentences, and an enthusiastic friendly tone (50-75 words)
 
-Format your response as JSON with keys: "short_summary", "long_summary", "key_findings" (array)"""
+Format your response as JSON with keys: "short_summary", "long_summary", "key_findings" (array), "eli5_summary"""
 
         try:
             response = self.client.chat.completions.create(
@@ -136,6 +137,7 @@ Format your response as JSON with keys: "short_summary", "long_summary", "key_fi
             short = result.get("short_summary", "") or result.get("short", "")
             long = result.get("long_summary", "") or result.get("detailed_summary", "")
             findings = result.get("key_findings", [])
+            eli5 = result.get("eli5_summary", "") or result.get("eli5", "")
             
             # Convert findings to list if it's a string or dict
             if isinstance(findings, str):
@@ -146,7 +148,8 @@ Format your response as JSON with keys: "short_summary", "long_summary", "key_fi
             return {
                 "short_summary": short,
                 "long_summary": long,
-                "key_findings": findings if isinstance(findings, list) else []
+                "key_findings": findings if isinstance(findings, list) else [],
+                "eli5_summary": eli5
             }
             
         except Exception as e:

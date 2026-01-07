@@ -1038,16 +1038,18 @@ def check_and_generate_summary_task(self, paper_id: int) -> Dict[str, Any]:
                     short = summaries.get("short_summary")
                     long = summaries.get("long_summary")
                     findings = summaries.get("key_findings")
+                    eli5 = summaries.get("eli5_summary")
                     
-                    if short or long or findings:
+                    if short or long or findings or eli5:
                         paper.ai_summary_short = short
                         paper.ai_summary_long = long
                         paper.ai_key_findings = findings
+                        paper.ai_summary_eli5 = eli5
                         paper.summary_generated_at = datetime.now()
                         paper.summary_generation_method = "llm_knowledge"
                         db.commit()
                         
-                        logger.info(f"Successfully saved summaries for paper {paper_id}: short={bool(short)}, long={bool(long)}, findings={len(findings) if findings else 0}")
+                        logger.info(f"Successfully saved summaries for paper {paper_id}: short={bool(short)}, long={bool(long)}, findings={len(findings) if findings else 0}, eli5={bool(eli5)}")
                         
                         return {
                             "status": "SUCCESS",
