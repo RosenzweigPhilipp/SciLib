@@ -135,6 +135,19 @@ class CrossRefTool:
                 }
                 fields["publication_type"] = type_map.get(pub_type, "article")
             
+            # Keywords/Subjects
+            keywords = []
+            if "subject" in crossref_data and crossref_data["subject"]:
+                keywords.extend(crossref_data["subject"])
+            # CrossRef also has 'category' field sometimes
+            if "category" in crossref_data and crossref_data["category"]:
+                if isinstance(crossref_data["category"], list):
+                    keywords.extend(crossref_data["category"])
+                elif isinstance(crossref_data["category"], str):
+                    keywords.append(crossref_data["category"])
+            if keywords:
+                fields["keywords"] = keywords
+            
         except Exception as e:
             logger.error(f"Failed to extract BibTeX fields: {e}")
         
@@ -247,7 +260,7 @@ class SemanticScholarTool:
             params = {
                 "query": title,
                 "limit": limit,
-                "fields": "title,authors,year,abstract,citationCount,referenceCount,venue,journal,externalIds,publicationDate,url,isOpenAccess,openAccessPdf"
+                "fields": "title,authors,year,abstract,citationCount,referenceCount,venue,journal,externalIds,publicationDate,url,isOpenAccess,openAccessPdf,fieldsOfStudy,s2FieldsOfStudy"
             }
             
             response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
@@ -273,7 +286,7 @@ class SemanticScholarTool:
             match_url = f"{self.base_url}/paper/search/match"
             params = {
                 "query": title,
-                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount"
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount,fieldsOfStudy,s2FieldsOfStudy"
             }
             
             response = requests.get(match_url, headers=self.headers, params=params, timeout=10)
@@ -303,7 +316,7 @@ class SemanticScholarTool:
             clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
             paper_url = f"{self.base_url}/paper/DOI:{clean_doi}"
             params = {
-                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount,referenceCount"
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount,referenceCount,fieldsOfStudy,s2FieldsOfStudy"
             }
             
             response = requests.get(paper_url, headers=self.headers, params=params, timeout=10)
@@ -329,7 +342,7 @@ class SemanticScholarTool:
             clean_id = arxiv_id.strip().replace("arXiv:", "")
             paper_url = f"{self.base_url}/paper/ARXIV:{clean_id}"
             params = {
-                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount"
+                "fields": "title,authors,year,abstract,venue,journal,externalIds,publicationDate,url,citationCount,fieldsOfStudy,s2FieldsOfStudy"
             }
             
             response = requests.get(paper_url, headers=self.headers, params=params, timeout=10)
@@ -417,6 +430,20 @@ class SemanticScholarTool:
             if "citationCount" in s2_data:
                 fields["citationCount"] = s2_data["citationCount"]
             
+            # Extract keywords from fieldsOfStudy
+            keywords = []
+            if "fieldsOfStudy" in s2_data and s2_data["fieldsOfStudy"]:
+                keywords.extend(s2_data["fieldsOfStudy"])
+            # Also include s2FieldsOfStudy (more detailed classification)
+            if "s2FieldsOfStudy" in s2_data and s2_data["s2FieldsOfStudy"]:
+                for field in s2_data["s2FieldsOfStudy"]:
+                    if isinstance(field, dict) and "category" in field:
+                        category = field["category"]
+                        if category not in keywords:
+                            keywords.append(category)
+            if keywords:
+                fields["keywords"] = keywords
+            
         except Exception as e:
             logger.error(f"Failed to extract BibTeX fields from S2 data: {e}")
         
@@ -440,7 +467,7 @@ class OpenAlexTool:
             params = {
                 "search": title,
                 "per_page": limit,
-                "select": "id,doi,title,display_name,publication_year,authorships,abstract_inverted_index,primary_location,type,cited_by_count,biblio"
+                "select": "id,doi,title,display_name,publication_year,authorships,abstract_inverted_index,primary_location,type,cited_by_count,biblio,keywords,topics"
             }
             
             response = requests.get(search_url, headers=self.headers, params=params, timeout=10)
@@ -459,8 +486,11 @@ class OpenAlexTool:
             # Clean DOI
             clean_doi = doi.strip().replace("https://doi.org/", "").replace("http://dx.doi.org/", "")
             paper_url = f"{self.base_url}/works/doi:{clean_doi}"
+            params = {
+                "select": "id,doi,title,display_name,publication_year,authorships,abstract_inverted_index,primary_location,type,cited_by_count,biblio,keywords,topics"
+            }
             
-            response = requests.get(paper_url, headers=self.headers, timeout=10)
+            response = requests.get(paper_url, headers=self.headers, params=params, timeout=10)
             response.raise_for_status()
             
             return response.json()
@@ -568,6 +598,34 @@ class OpenAlexTool:
             # Citation count (for confidence scoring)
             if "cited_by_count" in openalex_data:
                 fields["citationCount"] = openalex_data["cited_by_count"]
+            
+            # Extract keywords from topics (OpenAlex's classification)
+            keywords = []
+            if "topics" in openalex_data and openalex_data["topics"]:
+                for topic in openalex_data["topics"][:5]:  # Top 5 topics
+                    if isinstance(topic, dict):
+                        # Get topic display name
+                        if "display_name" in topic:
+                            keywords.append(topic["display_name"])
+                        # Also get subfield and field for broader categorization
+                        if "subfield" in topic and topic["subfield"]:
+                            subfield_name = topic["subfield"].get("display_name")
+                            if subfield_name and subfield_name not in keywords:
+                                keywords.append(subfield_name)
+                        if "field" in topic and topic["field"]:
+                            field_name = topic["field"].get("display_name")
+                            if field_name and field_name not in keywords:
+                                keywords.append(field_name)
+            # Also check for explicit keywords field
+            if "keywords" in openalex_data and openalex_data["keywords"]:
+                for kw in openalex_data["keywords"]:
+                    if isinstance(kw, dict) and "display_name" in kw:
+                        if kw["display_name"] not in keywords:
+                            keywords.append(kw["display_name"])
+                    elif isinstance(kw, str) and kw not in keywords:
+                        keywords.append(kw)
+            if keywords:
+                fields["keywords"] = keywords
             
         except Exception as e:
             logger.error(f"Failed to extract BibTeX fields from OpenAlex data: {e}")

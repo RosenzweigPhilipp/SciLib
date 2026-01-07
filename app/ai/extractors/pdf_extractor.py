@@ -288,3 +288,77 @@ class PDFExtractor:
             logger.error(f"Failed to extract basic metadata: {e}")
         
         return result
+    
+    def extract_keywords(self, pdf_path: str) -> Optional[List[str]]:
+        """
+        Extract author-provided keywords from PDF.
+        
+        Looks for common patterns like:
+        - Keywords: keyword1, keyword2, keyword3
+        - Index Terms: term1, term2, term3
+        - Key words—term1; term2; term3
+        
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            List of keywords if found, None otherwise
+        """
+        try:
+            with fitz.open(pdf_path) as doc:
+                # Only check first 2 pages for keywords (usually in abstract area)
+                text = ""
+                for page_num in range(min(2, len(doc))):
+                    text += doc[page_num].get_text() + "\n"
+                
+                # Multiple patterns to catch different journal styles
+                keyword_patterns = [
+                    # Standard "Keywords:" followed by comma/semicolon separated list
+                    r"(?:Keywords?|Key\s*words?|KEY\s*WORDS?)[:\s—–-]+([^\n]+?)(?=\n\s*\n|\n[A-Z1-9]\.|\nIntroduction|\n\d+\.\s)",
+                    # Index Terms (IEEE style)
+                    r"(?:Index\s*Terms?)[:\s—–-]+([^\n]+?)(?=\n\s*\n|\n[A-Z1-9]\.|\nIntroduction|\n\d+\.\s)",
+                    # Keywords on next line
+                    r"(?:Keywords?|Key\s*words?|KEY\s*WORDS?|Index\s*Terms?)[:\s]*\n([^\n]+?)(?=\n\s*\n|\n[A-Z1-9]\.)",
+                ]
+                
+                for pattern in keyword_patterns:
+                    match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        keywords_str = match.group(1).strip()
+                        
+                        # Parse keywords - could be comma, semicolon, or bullet separated
+                        keywords = []
+                        
+                        # Try semicolon first (more specific)
+                        if ';' in keywords_str:
+                            keywords = [k.strip() for k in keywords_str.split(';')]
+                        # Then comma
+                        elif ',' in keywords_str:
+                            keywords = [k.strip() for k in keywords_str.split(',')]
+                        # Then bullet/dash
+                        elif '•' in keywords_str or '–' in keywords_str or '-' in keywords_str:
+                            keywords = [k.strip() for k in re.split(r'[•–-]', keywords_str)]
+                        else:
+                            # Single keyword or space-separated
+                            keywords = [keywords_str]
+                        
+                        # Clean up keywords
+                        cleaned_keywords = []
+                        for kw in keywords:
+                            # Remove leading/trailing punctuation and whitespace
+                            kw = re.sub(r'^[\s.,:;•–-]+|[\s.,:;•–-]+$', '', kw)
+                            # Skip empty or too short keywords
+                            if kw and len(kw) >= 2 and len(kw) <= 100:
+                                # Skip common noise
+                                if kw.lower() not in ['and', 'or', 'the', 'a', 'an']:
+                                    cleaned_keywords.append(kw)
+                        
+                        if cleaned_keywords:
+                            logger.info(f"Extracted {len(cleaned_keywords)} keywords from PDF")
+                            return cleaned_keywords
+                
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to extract keywords from PDF: {e}")
+            return None

@@ -498,6 +498,15 @@ def update_paper_extraction_results(paper_id: int, extraction_result: Dict) -> b
                 if metadata.get("journal") and not paper.journal:
                     paper.journal = metadata["journal"]
                 
+                # Update keywords if not set
+                if metadata.get("keywords") and not paper.keywords:
+                    keywords = metadata["keywords"]
+                    if isinstance(keywords, list):
+                        # Convert list to comma-separated string
+                        paper.keywords = ", ".join(str(k) for k in keywords)
+                    else:
+                        paper.keywords = str(keywords)
+                
                 # Update extended BibTeX fields
                 bibtex_fields = ["publisher", "volume", "issue", "pages", "booktitle", 
                                 "series", "edition", "isbn", "url", "month", "note", "publication_type"]

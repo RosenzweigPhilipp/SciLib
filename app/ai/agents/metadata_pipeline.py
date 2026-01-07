@@ -180,6 +180,12 @@ class MetadataExtractionPipeline:
             authors = basic_metadata.get("authors")
             doi = basic_metadata.get("doi")
             
+            # Extract keywords from PDF (author-provided keywords)
+            pdf_keywords = self.pdf_extractor.extract_keywords(pdf_path)
+            if pdf_keywords:
+                debug_log(f"  Found {len(pdf_keywords)} keywords from PDF: {', '.join(pdf_keywords[:5])}{'...' if len(pdf_keywords) > 5 else ''}", Colors.OKGREEN)
+                pipeline_result["validation_notes"].append(f"Extracted {len(pdf_keywords)} keywords from PDF")
+            
             debug_result("Direct PDF Metadata", basic_metadata)
             logger.debug(f"Extracted - Title: {title}, DOI: {doi}")
             
@@ -275,7 +281,7 @@ class MetadataExtractionPipeline:
                 "abstract": None,
                 "year": None,
                 "journal": None,
-                "keywords": None
+                "keywords": pdf_keywords  # Keywords extracted from PDF (author-provided)
             }
             
             # If we have LLM metadata, merge it intelligently
@@ -313,6 +319,30 @@ class MetadataExtractionPipeline:
             
             final_metadata = validation_result["metadata"]
             pipeline_result["validation_notes"].extend(validation_result.get("notes", []))
+            
+            # Step 6b: AI Keyword Generation (if no keywords found and LLM enabled)
+            if not final_metadata.get("keywords") and self.use_llm:
+                debug_log(f"\n{'─'*40}", Colors.OKCYAN)
+                debug_log(f"STEP 6b: AI Keyword Generation", Colors.BOLD + Colors.OKCYAN)
+                debug_log(f"{'─'*40}", Colors.OKCYAN)
+                
+                ai_keywords = await self._generate_keywords_with_llm(
+                    title=final_metadata.get("title"),
+                    abstract=final_metadata.get("abstract"),
+                    journal=final_metadata.get("journal")
+                )
+                if ai_keywords:
+                    final_metadata["keywords"] = ai_keywords
+                    pipeline_result["sources"].append("ai_keyword_generation")
+                    pipeline_result["validation_notes"].append(f"Generated {len(ai_keywords)} keywords using AI")
+                    debug_log(f"  Generated {len(ai_keywords)} keywords: {', '.join(ai_keywords[:5])}", Colors.OKGREEN)
+                else:
+                    debug_log("  Could not generate keywords", Colors.WARNING)
+            elif not final_metadata.get("keywords"):
+                debug_log("  No keywords found and LLM disabled - skipping AI generation", Colors.WARNING)
+            else:
+                kw_count = len(final_metadata["keywords"]) if isinstance(final_metadata.get("keywords"), list) else 0
+                debug_log(f"  Using {kw_count} keywords from extraction", Colors.OKGREEN)
             
             # Calculate final confidence
             # Pass force_llm to indicate if this was a manual LLM rerun
@@ -518,6 +548,102 @@ If information is not clearly available, use null for that field."""
             "confidence": 0.2,
             "error": error_msg
         }
+    
+    async def _generate_keywords_with_llm(self, title: str = None, abstract: str = None, journal: str = None) -> Optional[List[str]]:
+        """
+        Generate keywords using LLM when no keywords are found from other sources.
+        
+        Args:
+            title: Paper title
+            abstract: Paper abstract
+            journal: Journal/venue name
+            
+        Returns:
+            List of generated keywords or None
+        """
+        if not self.llm:
+            return None
+        
+        if not title and not abstract:
+            logger.warning("Cannot generate keywords without title or abstract")
+            return None
+        
+        debug_log("  Generating keywords with LLM...", Colors.OKBLUE)
+        
+        system_prompt = """You are an expert at identifying research topics and keywords for academic papers.
+Based on the paper information provided, generate 5-10 relevant keywords that:
+1. Describe the main research topic and methodology
+2. Are commonly used in academic literature  
+3. Would help categorize this paper in a research library
+4. Range from specific (methodology) to general (field of study)
+
+Return ONLY a JSON array of keywords, nothing else. Example:
+["machine learning", "natural language processing", "transformer models", "text classification", "deep learning"]"""
+        
+        # Build content from available information
+        content_parts = []
+        if title:
+            content_parts.append(f"Title: {title}")
+        if abstract:
+            # Limit abstract length
+            abstract_text = abstract[:1500] if len(abstract) > 1500 else abstract
+            content_parts.append(f"Abstract: {abstract_text}")
+        if journal:
+            content_parts.append(f"Journal/Venue: {journal}")
+        
+        content = "\n\n".join(content_parts)
+        
+        try:
+            response = await self.llm.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Generate keywords for this paper:\n\n{content}"}
+                ],
+                temperature=0.3
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Clean up response
+            if result_text.startswith('```json'):
+                result_text = result_text[7:].strip()
+            if result_text.startswith('```'):
+                result_text = result_text[3:].strip()
+            if result_text.endswith('```'):
+                result_text = result_text[:-3].strip()
+            
+            # Find JSON array
+            start_idx = result_text.find('[')
+            end_idx = result_text.rfind(']')
+            
+            if start_idx != -1 and end_idx != -1:
+                result_text = result_text[start_idx:end_idx+1]
+            
+            keywords = json.loads(result_text)
+            
+            if isinstance(keywords, list) and all(isinstance(k, str) for k in keywords):
+                # Clean and validate keywords
+                clean_keywords = []
+                for kw in keywords:
+                    kw = kw.strip()
+                    if len(kw) >= 2 and len(kw) <= 100:
+                        clean_keywords.append(kw)
+                
+                debug_log(f"  ✓ Generated {len(clean_keywords)} keywords", Colors.OKGREEN)
+                return clean_keywords[:10]  # Limit to 10 keywords
+            else:
+                logger.warning(f"LLM returned invalid keywords format: {type(keywords)}")
+                return None
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM keywords response: {e}")
+            debug_log(f"  Failed to parse keywords JSON: {e}", Colors.FAIL)
+            return None
+        except Exception as e:
+            logger.error(f"LLM keyword generation failed: {e}")
+            debug_log(f"  LLM keyword generation failed: {e}", Colors.FAIL)
+            return None
     
     async def _search_scientific_databases_direct(self, title: str, authors: str, doi_metadata: Optional[Dict]) -> Dict:
         """
@@ -887,15 +1013,36 @@ If information is not clearly available, use null for that field."""
         debug_log("  Merging metadata fields...", Colors.OKBLUE)
         
         # Define all fields to merge (basic + extended BibTeX)
-        basic_fields = ["authors", "abstract", "year", "journal", "doi", "url", "keywords"]
+        basic_fields = ["authors", "abstract", "year", "journal", "doi", "url"]
         extended_fields = ["publisher", "volume", "issue", "pages", "booktitle", "series", 
                           "edition", "chapter", "isbn", "month", "note", "institution", 
                           "report_number", "publication_type"]
         all_fields = basic_fields + extended_fields
         
+        # Keywords are handled separately to merge from multiple sources
+        all_keywords = []
+        if merged.get("keywords"):
+            # Start with PDF-extracted keywords (author-provided, highest priority)
+            pdf_kws = merged["keywords"]
+            if isinstance(pdf_kws, list):
+                all_keywords.extend(pdf_kws)
+            elif isinstance(pdf_kws, str):
+                all_keywords.extend([k.strip() for k in pdf_kws.split(',')])
+        
         for source in all_sources:
             source_data = source["data"]
             source_name = source["name"]
+            
+            # Collect keywords from this source
+            source_keywords = self._extract_field_from_source(source_data, "keywords")
+            if source_keywords:
+                if isinstance(source_keywords, list):
+                    all_keywords.extend(source_keywords)
+                    debug_log(f"    Added {len(source_keywords)} keywords from {source_name}", Colors.OKGREEN)
+                elif isinstance(source_keywords, str):
+                    kws = [k.strip() for k in source_keywords.split(',')]
+                    all_keywords.extend(kws)
+                    debug_log(f"    Added {len(kws)} keywords from {source_name}", Colors.OKGREEN)
             
             # For each field, prefer high-quality sources
             for field in all_fields:
@@ -957,6 +1104,21 @@ If information is not clearly available, use null for that field."""
                     else:
                         # For other fields, trust high-quality sources
                         merged[field] = source_value
+        
+        # Merge keywords from all sources (deduplicated)
+        if all_keywords:
+            seen_keywords = set()
+            unique_keywords = []
+            for kw in all_keywords:
+                if isinstance(kw, str):
+                    kw_normalized = kw.strip().lower()
+                    if kw_normalized and kw_normalized not in seen_keywords and len(kw_normalized) >= 2:
+                        seen_keywords.add(kw_normalized)
+                        unique_keywords.append(kw.strip())
+            if unique_keywords:
+                merged["keywords"] = unique_keywords
+                validation_notes.append(f"Merged {len(unique_keywords)} unique keywords from all sources")
+                debug_log(f"    Merged {len(unique_keywords)} unique keywords", Colors.OKGREEN)
         
         # Clean and normalize all fields
         merged = self._clean_metadata(merged)
@@ -1118,6 +1280,9 @@ If information is not clearly available, use null for that field."""
             # For authors, preserve structured lists/dicts so cleaning can normalize
             if field == 'authors' and isinstance(val, (list, dict)):
                 return val
+            # For keywords, preserve as list for proper merging
+            if field == 'keywords' and isinstance(val, list):
+                return val
             # For other list-like fields (e.g., title from CrossRef), return first element or string
             if isinstance(val, list):
                 return str(val[0]).strip() if val else None
@@ -1133,7 +1298,7 @@ If information is not clearly available, use null for that field."""
             "year": ["year", "publication_year", "pub_year"],
             "journal": ["journal", "venue", "container-title"],
             "doi": ["doi", "DOI"],
-            "keywords": ["keywords", "tags"],
+            "keywords": ["keywords", "tags", "fieldsOfStudy", "s2FieldsOfStudy"],
             "url": ["url", "link", "external_url"]
         }
         
@@ -1141,6 +1306,8 @@ If information is not clearly available, use null for that field."""
             if alt_field in source_data and source_data[alt_field]:
                 val = source_data[alt_field]
                 if field == 'authors' and isinstance(val, (list, dict)):
+                    return val
+                if field == 'keywords' and isinstance(val, list):
                     return val
                 if isinstance(val, list):
                     return str(val[0]).strip() if val else None
@@ -1231,6 +1398,40 @@ If information is not clearly available, use null for that field."""
             # Remove doi: prefix
             doi = re.sub(r'^(doi:?\s*)', '', doi, flags=re.IGNORECASE)
             metadata["doi"] = doi
+        
+        # Clean keywords: normalize into a list of unique strings
+        if metadata.get("keywords"):
+            keywords = metadata["keywords"]
+            normalized_keywords = []
+            seen = set()
+            
+            # Convert to list if string
+            if isinstance(keywords, str):
+                # Split by common delimiters
+                if ';' in keywords:
+                    keywords = [k.strip() for k in keywords.split(';')]
+                elif ',' in keywords:
+                    keywords = [k.strip() for k in keywords.split(',')]
+                else:
+                    keywords = [keywords.strip()]
+            
+            if isinstance(keywords, list):
+                for kw in keywords:
+                    if isinstance(kw, str):
+                        kw = kw.strip()
+                        # Remove trailing/leading punctuation
+                        kw = kw.strip('.,;:')
+                        # Normalize whitespace
+                        kw = ' '.join(kw.split())
+                        # Skip empty or very short keywords
+                        if len(kw) >= 2:
+                            # Case-insensitive deduplication
+                            kw_lower = kw.lower()
+                            if kw_lower not in seen:
+                                seen.add(kw_lower)
+                                normalized_keywords.append(kw)
+            
+            metadata["keywords"] = normalized_keywords if normalized_keywords else None
         
         return metadata
     
