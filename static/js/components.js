@@ -421,6 +421,11 @@ class UploadManager {
         const uploadProgress = (result.successful / result.total) * 50;
         document.getElementById('batch-progress-fill').style.width = `${uploadProgress}%`;
         
+        // Track upload failures separately (for polling logic)
+        const failedEl = document.getElementById('batch-failed');
+        failedEl.textContent = result.failed;
+        failedEl.dataset.uploadFailed = result.failed;
+        
         // Update each file item
         result.results.forEach((fileResult, index) => {
             const fileItem = document.getElementById(`batch-file-${index}`);
@@ -488,14 +493,24 @@ class UploadManager {
     async pollBatchStatus() {
         let allComplete = true;
         let completedCount = 0;
-        let failedCount = parseInt(document.getElementById('batch-failed').textContent) || 0;
+        let failedCount = 0;
+        let extractingCount = 0;
+        
+        // Count already-failed uploads (non-task failures)
+        const uploadFailedCount = parseInt(document.getElementById('batch-failed').dataset.uploadFailed || '0');
         
         for (const [taskId, taskInfo] of this.batchTasks) {
-            if (taskInfo.status === 'completed' || taskInfo.status === 'failed') {
-                if (taskInfo.status === 'completed') completedCount++;
+            // Count already completed/failed tasks
+            if (taskInfo.status === 'completed') {
+                completedCount++;
+                continue;
+            }
+            if (taskInfo.status === 'failed') {
+                failedCount++;
                 continue;
             }
             
+            // Task still in progress, poll for status
             try {
                 const status = await API.ai.getTaskStatus(taskId);
                 
@@ -527,6 +542,7 @@ class UploadManager {
                 } else {
                     // Still processing
                     allComplete = false;
+                    extractingCount++;
                     if (status.progress) {
                         statusText.textContent = `Extracting: ${status.progress}%`;
                     }
@@ -534,22 +550,21 @@ class UploadManager {
             } catch (error) {
                 console.error(`Error polling task ${taskId}:`, error);
                 allComplete = false;
+                extractingCount++;
             }
         }
         
-        // Update counts
-        const extractingCount = Array.from(this.batchTasks.values())
-            .filter(t => t.status === 'extracting').length;
+        // Update counts in UI
         document.getElementById('batch-extracting').textContent = extractingCount;
         document.getElementById('batch-completed').textContent = completedCount;
-        document.getElementById('batch-failed').textContent = failedCount;
+        document.getElementById('batch-failed').textContent = failedCount + uploadFailedCount;
         
         // Update progress bar (50% for upload + 50% for extraction)
         const totalTasks = this.batchTasks.size;
         const uploadedCount = parseInt(document.getElementById('batch-uploaded').textContent) || 0;
         const totalFiles = parseInt(document.getElementById('batch-total').textContent) || 1;
         const uploadProgress = (uploadedCount / totalFiles) * 50;
-        const extractionProgress = totalTasks > 0 ? (completedCount / totalTasks) * 50 : 50;
+        const extractionProgress = totalTasks > 0 ? ((completedCount + failedCount) / totalTasks) * 50 : 50;
         document.getElementById('batch-progress-fill').style.width = `${uploadProgress + extractionProgress}%`;
         
         // Check if all complete
