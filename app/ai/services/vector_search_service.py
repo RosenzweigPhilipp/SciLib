@@ -384,7 +384,9 @@ async def find_similar_papers(
         WHERE p.embedding_title_abstract IS NOT NULL
     """
     
-    params = {"source_embedding": str(list(paper.embedding_title_abstract))}
+    # Convert embedding to plain Python floats for PostgreSQL
+    embedding_list = [float(x) for x in paper.embedding_title_abstract]
+    params = {"source_embedding": str(embedding_list)}
     
     # Exclude self if requested
     if exclude_self:
