@@ -58,7 +58,7 @@ class RAGService:
                 db=db,
                 query=query,
                 limit=max_papers,
-                min_score=0.3,  # Only use reasonably relevant papers
+                min_score=0.2,  # Lowered from 0.3 to handle meta-linguistic queries like "what do I have"
                 collection_ids=collection_ids,
                 tag_ids=tag_ids,
                 year_from=year_from,

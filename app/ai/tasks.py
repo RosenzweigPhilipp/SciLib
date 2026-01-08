@@ -344,6 +344,10 @@ def extract_pdf_metadata_task(self, pdf_path: str, paper_id: int, use_llm: bool 
                 
                 db = SessionLocal()
                 try:
+                    # Generate embedding for the paper (needed for similarity search and Q&A)
+                    logger.info(f"Triggering embedding generation for paper {paper_id}")
+                    generate_paper_embedding_task.delay(paper_id)
+                    
                     # Trigger smart collection classification if enabled
                     smart_collections_enabled = Settings.get(db, "smart_collections_enabled", False)
                     if smart_collections_enabled:

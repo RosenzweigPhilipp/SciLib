@@ -525,7 +525,7 @@ class UploadManager {
                     taskInfo.status = 'completed';
                     completedCount++;
                     
-                    const confidence = response.result?.confidence || 0;
+                    const confidence = response.result?.extraction_data?.confidence || 0;
                     statusText.textContent = `Completed (${Math.round(confidence * 100)}% confidence)`;
                     statusIcon.className = 'fas fa-check status-icon success';
                     fileItem.classList.remove('extracting');

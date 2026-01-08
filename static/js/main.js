@@ -65,8 +65,13 @@ class App {
                     this.handleSearchSubmit(e.target.value);
                 }
             });
-            // Keep existing input handler for live filtering
-            globalSearch.addEventListener('input', (e) => this.handleGlobalSearch(e.target.value));
+            // Live filtering only for regular search mode (not Q&A mode)
+            globalSearch.addEventListener('input', (e) => {
+                const activeMode = document.querySelector('.mode-btn.active')?.dataset.mode;
+                if (activeMode !== 'qa') {
+                    this.handleGlobalSearch(e.target.value);
+                }
+            });
         } else {
             console.warn('Global search input not found');
         }
