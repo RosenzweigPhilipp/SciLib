@@ -188,6 +188,18 @@ class API {
             });
         },
         
+        // Q&A Search (RAG)
+        async askQuestion(question, maxPapers = 5, filters = {}) {
+            return API.request('/search/qa', {
+                method: 'POST',
+                body: JSON.stringify({
+                    question: question,
+                    max_papers: maxPapers,
+                    ...filters
+                })
+            });
+        },
+        
         // External Discovery (discover API)
         async discoverPapers(query, limit = 10) {
             return API.request(`/discover/search?query=${encodeURIComponent(query)}&limit=${limit}`);

@@ -9,12 +9,12 @@
     background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
     animation: fadeIn 0.3s ease;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal.active {
     display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .modal-content {
@@ -30,6 +30,10 @@
 
 .modal.large .modal-content {
     max-width: 800px;
+}
+
+.modal-large .modal-content {
+    max-width: 900px;
 }
 
 @keyframes slideIn {

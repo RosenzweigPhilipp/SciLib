@@ -58,10 +58,28 @@ class App {
         // Global search
         const globalSearch = document.getElementById('global-search');
         if (globalSearch) {
+            // Handle Enter key for search
+            globalSearch.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleSearchSubmit(e.target.value);
+                }
+            });
+            // Keep existing input handler for live filtering
             globalSearch.addEventListener('input', (e) => this.handleGlobalSearch(e.target.value));
         } else {
             console.warn('Global search input not found');
         }
+        
+        // Search mode toggle
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                modeButtons.forEach(b => b.classList.remove('active'));
+                e.target.closest('.mode-btn').classList.add('active');
+                this.updateSearchPlaceholder();
+            });
+        });
 
         // API key form
         const apiKeyForm = document.getElementById('api-key-form');
@@ -236,6 +254,101 @@ class App {
     handleGlobalSearch(query) {
         if (this.currentSection === 'papers') {
             this.paperManager.searchPapers(query);
+        }
+    }
+    
+    updateSearchPlaceholder() {
+        const globalSearch = document.getElementById('global-search');
+        const activeMode = document.querySelector('.mode-btn.active')?.dataset.mode;
+        
+        if (activeMode === 'qa') {
+            globalSearch.placeholder = 'Ask a question about your papers...';
+        } else {
+            globalSearch.placeholder = 'Search papers...';
+        }
+    }
+    
+    async handleSearchSubmit(query) {
+        if (!query || !query.trim()) return;
+        
+        const activeMode = document.querySelector('.mode-btn.active')?.dataset.mode;
+        
+        if (activeMode === 'qa') {
+            // Q&A mode - use RAG
+            await this.performQASearch(query);
+        } else {
+            // Regular search mode - just filter papers
+            if (this.currentSection === 'papers') {
+                this.paperManager.searchPapers(query);
+            }
+        }
+    }
+    
+    async performQASearch(question) {
+        const modal = document.getElementById('qa-results-modal');
+        const content = document.getElementById('qa-results-content');
+        
+        // Show modal with loading state
+        modal.style.display = 'flex';
+        content.innerHTML = `
+            <div class="qa-loading">
+                <i class="fas fa-robot fa-spin"></i>
+                <p>Analyzing your papers and generating answer...</p>
+            </div>
+        `;
+        
+        try {
+            const result = await API.ai.askQuestion(question);
+            
+            // Display results
+            content.innerHTML = `
+                <div class="qa-question">
+                    <div class="qa-question-label"><i class="fas fa-question-circle"></i> Your Question</div>
+                    <div class="qa-question-text">${Utils.sanitizeHtml(question)}</div>
+                </div>
+                
+                <div class="qa-answer">
+                    <div class="qa-answer-label">
+                        <i class="fas fa-robot"></i> AI Answer
+                        ${result.has_sources ? `<span class="badge">${result.context_papers_count} papers used</span>` : ''}
+                    </div>
+                    <div class="qa-answer-text">${Utils.sanitizeHtml(result.answer)}</div>
+                </div>
+                
+                ${result.sources && result.sources.length > 0 ? `
+                    <div class="qa-sources">
+                        <div class="qa-sources-header">
+                            <i class="fas fa-book"></i> Source Papers
+                        </div>
+                        ${result.sources.map((source, idx) => `
+                            <div class="qa-source-card" onclick="window.app.paperManager.showPaperDetails(${source.paper_id})">
+                                <div class="qa-source-header">
+                                    <div class="qa-source-title">[Paper ${idx + 1}] ${Utils.sanitizeHtml(source.title)}</div>
+                                    <div class="qa-source-score">${Math.round(source.relevance_score * 100)}% relevant</div>
+                                </div>
+                                <div class="qa-source-meta">
+                                    ${source.authors ? `<span><i class="fas fa-user"></i> ${Utils.sanitizeHtml(source.authors)}</span>` : ''}
+                                    ${source.year ? `<span><i class="fas fa-calendar"></i> ${source.year}</span>` : ''}
+                                    ${source.journal ? `<span><i class="fas fa-book-open"></i> ${Utils.sanitizeHtml(source.journal)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `
+                    <div class="qa-no-results">
+                        <i class="fas fa-info-circle"></i>
+                        <p>No relevant papers found in your library for this question.</p>
+                    </div>
+                `}
+            `;
+            
+        } catch (error) {
+            content.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>Failed to generate answer: ${error.message || 'Unknown error'}</p>
+                </div>
+            `;
         }
     }
 }
