@@ -290,34 +290,10 @@ class API {
         }
     };
 
-    // Tags API
-    static tags = {
-        async list() {
-            return API.request('/tags');
-        },
-
-        async get(id) {
-            return API.request(`/tags/${id}`);
-        },
-
-        async create(data) {
-            return API.request('/tags', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
-
-        async update(id, data) {
-            return API.request(`/tags/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify(data),
-            });
-        },
-
-        async delete(id) {
-            return API.request(`/tags/${id}`, {
-                method: 'DELETE',
-            });
+    // AI API
+    static ai = {
+        async getPaperTasks(paperId) {
+            return API.request(`/ai/paper/${paperId}/tasks`);
         }
     };
 }

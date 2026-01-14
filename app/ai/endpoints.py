@@ -369,3 +369,114 @@ async def generate_all_embeddings(
         "total_with_embeddings": total_with_embeddings,
         "errors": errors[:10] if errors else []  # Return first 10 errors
     }
+
+
+@router.get("/paper/{paper_id}/tasks")
+async def get_paper_tasks(
+    paper_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(verify_api_key)
+):
+    """
+    Get the status of all AI tasks for a paper.
+    Returns progress information for:
+    1. Metadata extraction
+    2. Embedding generation
+    3. Classification/categorization
+    4. Knowledge check
+    5. Summary generation
+    6. Similar papers search
+    """
+    paper = db.query(Paper).filter(Paper.id == paper_id).first()
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    
+    tasks = []
+    completed_count = 0
+    
+    # Task 1: Metadata Extraction
+    metadata_status = "pending"
+    if paper.extraction_status == "completed":
+        metadata_status = "completed"
+        completed_count += 1
+    elif paper.extraction_status == "processing":
+        metadata_status = "in-progress"
+    elif paper.extraction_status == "failed":
+        metadata_status = "failed"
+    
+    tasks.append({
+        "name": "Metadata Extraction",
+        "status": metadata_status,
+        "confidence": paper.extraction_confidence if paper.extraction_confidence else 0.0,
+        "completed_at": paper.extracted_at.isoformat() if paper.extracted_at else None
+    })
+    
+    # Task 2: Embedding Generation
+    embedding_status = "completed" if paper.embedding_title_abstract is not None else "pending"
+    if embedding_status == "completed":
+        completed_count += 1
+    
+    tasks.append({
+        "name": "Embedding Generation",
+        "status": embedding_status,
+        "completed_at": paper.embedding_generated_at.isoformat() if paper.embedding_generated_at else None
+    })
+    
+    # Task 3: Classification (we can infer from keywords/extraction)
+    classification_status = "completed" if paper.keywords else "pending"
+    if classification_status == "completed":
+        completed_count += 1
+    
+    tasks.append({
+        "name": "Classification",
+        "status": classification_status
+    })
+    
+    # Task 4: Knowledge Check
+    knowledge_status = "completed" if paper.llm_knowledge_check is not None else "pending"
+    if knowledge_status == "completed":
+        completed_count += 1
+    
+    tasks.append({
+        "name": "Knowledge Check",
+        "status": knowledge_status,
+        "result": paper.llm_knowledge_check if paper.llm_knowledge_check is not None else None,
+        "confidence": paper.llm_knowledge_confidence if paper.llm_knowledge_confidence else None,
+        "completed_at": paper.llm_knowledge_checked_at.isoformat() if paper.llm_knowledge_checked_at else None
+    })
+    
+    # Task 5: Summary Generation
+    summary_status = "completed" if paper.ai_summary_short else "pending"
+    if summary_status == "completed":
+        completed_count += 1
+    
+    tasks.append({
+        "name": "Summary Generation",
+        "status": summary_status,
+        "method": paper.summary_generation_method,
+        "completed_at": paper.summary_generated_at.isoformat() if paper.summary_generated_at else None
+    })
+    
+    # Task 6: Similar Papers Search
+    similar_status = "completed" if paper.similar_papers else "pending"
+    if similar_status == "completed":
+        completed_count += 1
+    
+    tasks.append({
+        "name": "Similar Papers",
+        "status": similar_status,
+        "count": len(paper.similar_papers) if paper.similar_papers else 0,
+        "completed_at": paper.similar_papers_updated_at.isoformat() if paper.similar_papers_updated_at else None
+    })
+    
+    # Calculate overall progress
+    total_tasks = len(tasks)
+    overall_progress = (completed_count / total_tasks) * 100 if total_tasks > 0 else 0
+    
+    return {
+        "paper_id": paper_id,
+        "tasks": tasks,
+        "overall_progress": round(overall_progress, 1),
+        "completed": completed_count,
+        "total": total_tasks
+    }

@@ -13,13 +13,6 @@ paper_collections = Table(
     Column('collection_id', Integer, ForeignKey('collections.id'), primary_key=True)
 )
 
-paper_tags = Table(
-    'paper_tags',
-    Base.metadata,
-    Column('paper_id', Integer, ForeignKey('papers.id'), primary_key=True),
-    Column('tag_id', Integer, ForeignKey('tags.id'), primary_key=True)
-)
-
 
 class Paper(Base):
     __tablename__ = "papers"
@@ -92,7 +85,6 @@ class Paper(Base):
     
     # Relationships
     collections = relationship("Collection", secondary=paper_collections, back_populates="papers")
-    tags = relationship("Tag", secondary=paper_tags, back_populates="papers")
     
     # Citation relationships
     citations_made = relationship(
@@ -123,18 +115,6 @@ class Collection(Base):
     papers = relationship("Paper", secondary=paper_collections, back_populates="collections")
 
 
-class Tag(Base):
-    __tablename__ = "tags"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, unique=True, index=True)
-    color = Column(String(7), default="#007bff")  # Hex color code
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships  
-    papers = relationship("Paper", secondary=paper_tags, back_populates="tags")
-
-
 class Citation(Base):
     __tablename__ = "citations"
     
@@ -151,7 +131,6 @@ class Citation(Base):
 
 # Compatibility aliases for association tables
 PaperCollection = paper_collections
-PaperTag = paper_tags
 
 
 class Settings(Base):

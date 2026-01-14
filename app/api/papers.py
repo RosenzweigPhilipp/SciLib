@@ -322,8 +322,7 @@ async def list_papers(
     """List papers with pagination and optional search"""
     from sqlalchemy.orm import joinedload
     query = db.query(PaperModel).options(
-        joinedload(PaperModel.collections),
-        joinedload(PaperModel.tags)
+        joinedload(PaperModel.collections)
     )
     
     if search:
@@ -342,8 +341,7 @@ async def get_paper(paper_id: int, db: Session = Depends(get_db)):
     """Get a specific paper by ID"""
     from sqlalchemy.orm import joinedload
     paper = db.query(PaperModel).options(
-        joinedload(PaperModel.collections),
-        joinedload(PaperModel.tags)
+        joinedload(PaperModel.collections)
     ).filter(PaperModel.id == paper_id).first()
     if not paper:
         raise HTTPException(
@@ -376,11 +374,10 @@ async def update_paper(paper_id: int, paper_update: PaperUpdate, db: Session = D
 async def clear_all_papers(db: Session = Depends(get_db)):
     """Delete all papers and uploaded files (administrative action)."""
     try:
-        from ..database.models import paper_collections, paper_tags
+        from ..database.models import paper_collections
         
         # Delete association tables first (foreign key constraints)
         db.execute(paper_collections.delete())
-        db.execute(paper_tags.delete())
         
         # Get all papers
         papers = db.query(PaperModel).all()
@@ -405,13 +402,12 @@ async def clear_all_papers(db: Session = Depends(get_db)):
 
 @router.delete("/clear-database", status_code=status.HTTP_204_NO_CONTENT)
 async def clear_entire_database(db: Session = Depends(get_db)):
-    """Delete ALL data from the database including papers, collections, tags, and associations (administrative action)."""
+    """Delete ALL data from the database including papers, collections, and associations (administrative action)."""
     try:
-        from ..database.models import Collection, Tag, paper_collections, paper_tags
+        from ..database.models import Collection, paper_collections
         
         # Delete association tables first (foreign key constraints)
         db.execute(paper_collections.delete())
-        db.execute(paper_tags.delete())
         
         # Delete papers and their files
         papers = db.query(PaperModel).all()
@@ -426,7 +422,6 @@ async def clear_entire_database(db: Session = Depends(get_db)):
         # Delete all main tables
         db.query(PaperModel).delete()
         db.query(Collection).delete()
-        db.query(Tag).delete()
         
         db.commit()
         return

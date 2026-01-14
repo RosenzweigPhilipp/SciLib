@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .api import papers, collections, tags, search, discovery, citations, smart_collections
+from .api import papers, collections, search, discovery, citations, smart_collections
 from .api import settings as settings_router
 from .ai import endpoints as ai_endpoints
 from .auth import verify_api_key
@@ -36,7 +36,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Include API routes with simple API key authentication
 app.include_router(papers.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(collections.router, prefix="/api", dependencies=[Depends(verify_api_key)])
-app.include_router(tags.router, prefix="/api", dependencies=[Depends(verify_api_key)])
 app.include_router(search.router, dependencies=[Depends(verify_api_key)])
 app.include_router(discovery.router, dependencies=[Depends(verify_api_key)])
 app.include_router(citations.router, dependencies=[Depends(verify_api_key)])
@@ -80,7 +79,7 @@ async def api_health_check():
 @app.get("/api/stats")
 async def get_stats():
     """Get basic statistics - no auth required for demo"""
-    from .database import SessionLocal, Paper, Collection, Tag
+    from .database import SessionLocal, Paper, Collection
     from datetime import datetime, timedelta
     
     try:
@@ -91,17 +90,13 @@ async def get_stats():
             # Count collections
             total_collections = db.query(Collection).count()
             
-            # Count tags
-            total_tags = db.query(Tag).count()
-            
             # Count recent uploads (last 30 days)
             thirty_days_ago = datetime.now() - timedelta(days=30)
             recent_uploads = db.query(Paper).filter(Paper.created_at > thirty_days_ago).count()
         
         return {
             "total_papers": total_papers,
-            "total_collections": total_collections, 
-            "total_tags": total_tags,
+            "total_collections": total_collections,
             "recent_uploads": recent_uploads
         }
         
@@ -109,7 +104,6 @@ async def get_stats():
         return {
             "total_papers": 0,
             "total_collections": 0,
-            "total_tags": 0,
             "recent_uploads": 0,
             "error": str(e)
         }

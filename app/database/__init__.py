@@ -1,5 +1,5 @@
 from .connection import SessionLocal, engine, get_db
-from .models import Base, Paper, Collection, Tag, PaperCollection, PaperTag, Settings
+from .models import Base, Paper, Collection, PaperCollection, Settings
 
 __all__ = [
     "SessionLocal",
@@ -8,8 +8,6 @@ __all__ = [
     "Base",
     "Paper",
     "Collection",
-    "Tag", 
     "PaperCollection",
-    "PaperTag",
     "Settings"
 ]

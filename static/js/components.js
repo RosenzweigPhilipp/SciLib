@@ -73,6 +73,9 @@ class UIComponents {
                     ${paper.extraction_confidence ? `<span class="ai-confidence" title="AI Extraction Confidence">${Math.round(paper.extraction_confidence * 100)}% AI</span>` : ''}
                 </div>
                 <div class="paper-actions">
+                    <button class="action-btn" data-paper-id="${paper.id}" title="View AI Tasks" onclick="window.taskProgressManager && window.taskProgressManager.showTaskProgress(${paper.id})">
+                        <i class="fas fa-tasks"></i>
+                    </button>
                     <button class="action-btn view-btn" data-paper-id="${paper.id}" title="View Details">
                         <i class="fas fa-eye"></i>
                     </button>
@@ -182,27 +185,6 @@ class UIComponents {
         return card;
     }
 
-    // Create tag item
-    static createTagItem(tag) {
-        const item = document.createElement('div');
-        item.className = 'tag-item';
-        item.innerHTML = `
-            <div class="tag-info">
-                <div class="tag-color" style="background-color: ${tag.color}"></div>
-                <span class="tag-name">${Utils.sanitizeHtml(tag.name)}</span>
-            </div>
-                <div class="tag-actions">
-                <button class="action-btn" onclick="window.tagManager && window.tagManager.editTag(${tag.id})" title="Edit">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="action-btn" onclick="window.tagManager && window.tagManager.deleteTag(${tag.id})" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        `;
-        return item;
-    }
-
     // Modal utilities
     static showModal(modalId) {
         const modal = document.getElementById(modalId);
@@ -228,6 +210,174 @@ class UIComponents {
             const result = window.confirm(message);
             resolve(result);
         });
+    }
+}
+
+// Task Progress Manager
+class TaskProgressManager {
+    constructor() {
+        this.activeTracking = new Map(); // paperId -> intervalId
+    }
+
+    async showTaskProgress(paperId) {
+        const data = await API.ai.getPaperTasks(paperId);
+        
+        // Create modal
+        const modal = this.createProgressModal(paperId, data);
+        document.body.appendChild(modal);
+        
+        // Show modal
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        // Start tracking if not all tasks completed
+        if (data.overall_progress < 100) {
+            this.startTracking(paperId, modal);
+        }
+    }
+
+    createProgressModal(paperId, data) {
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.id = `task-modal-${paperId}`;
+        
+        modal.innerHTML = `
+            <div class="modal-content task-progress-modal">
+                <div class="modal-header">
+                    <h3>AI Task Progress</h3>
+                    <button class="close-btn" onclick="window.taskProgressManager.closeModal(${paperId})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="overall-progress">
+                        <div class="progress-info">
+                            <span>Overall Progress</span>
+                            <span class="progress-percentage">${data.overall_progress}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${data.overall_progress}%"></div>
+                        </div>
+                        <div class="progress-stats">
+                            <span>${data.completed} of ${data.total} tasks completed</span>
+                        </div>
+                    </div>
+                    
+                    <div class="tasks-list" id="tasks-list-${paperId}">
+                        ${this.renderTasks(data.tasks)}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.closeModal(paperId);
+            }
+        });
+        
+        return modal;
+    }
+
+    renderTasks(tasks) {
+        return tasks.map(task => {
+            const statusIcon = this.getStatusIcon(task.status);
+            const statusClass = `task-status-${task.status}`;
+            
+            let details = '';
+            if (task.confidence !== undefined && task.confidence !== null) {
+                details += `<div class="task-detail">Confidence: ${(task.confidence * 100).toFixed(0)}%</div>`;
+            }
+            if (task.count !== undefined) {
+                details += `<div class="task-detail">Found: ${task.count} papers</div>`;
+            }
+            if (task.completed_at) {
+                const date = new Date(task.completed_at);
+                details += `<div class="task-detail">Completed: ${date.toLocaleTimeString()}</div>`;
+            }
+            
+            return `
+                <div class="task-item ${statusClass}">
+                    <div class="task-icon">${statusIcon}</div>
+                    <div class="task-info">
+                        <div class="task-name">${task.name}</div>
+                        ${details}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    getStatusIcon(status) {
+        switch(status) {
+            case 'completed':
+                return '<i class="fas fa-check-circle" style="color: #28a745;"></i>';
+            case 'in-progress':
+                return '<i class="fas fa-spinner fa-spin" style="color: #007bff;"></i>';
+            case 'failed':
+                return '<i class="fas fa-exclamation-circle" style="color: #dc3545;"></i>';
+            default:
+                return '<i class="fas fa-clock" style="color: #6c757d;"></i>';
+        }
+    }
+
+    async startTracking(paperId, modal) {
+        // Stop existing tracking if any
+        this.stopTracking(paperId);
+        
+        const intervalId = setInterval(async () => {
+            try {
+                const data = await API.ai.getPaperTasks(paperId);
+                this.updateProgress(paperId, data);
+                
+                // Stop tracking if complete
+                if (data.overall_progress >= 100) {
+                    this.stopTracking(paperId);
+                }
+            } catch (error) {
+                console.error('Error updating task progress:', error);
+            }
+        }, 2000); // Poll every 2 seconds
+        
+        this.activeTracking.set(paperId, intervalId);
+    }
+
+    updateProgress(paperId, data) {
+        const modal = document.getElementById(`task-modal-${paperId}`);
+        if (!modal) return;
+        
+        // Update overall progress
+        const progressFill = modal.querySelector('.progress-fill');
+        const progressPercentage = modal.querySelector('.progress-percentage');
+        const progressStats = modal.querySelector('.progress-stats span');
+        
+        if (progressFill) progressFill.style.width = `${data.overall_progress}%`;
+        if (progressPercentage) progressPercentage.textContent = `${data.overall_progress}%`;
+        if (progressStats) progressStats.textContent = `${data.completed} of ${data.total} tasks completed`;
+        
+        // Update tasks list
+        const tasksList = modal.querySelector(`#tasks-list-${paperId}`);
+        if (tasksList) {
+            tasksList.innerHTML = this.renderTasks(data.tasks);
+        }
+    }
+
+    stopTracking(paperId) {
+        const intervalId = this.activeTracking.get(paperId);
+        if (intervalId) {
+            clearInterval(intervalId);
+            this.activeTracking.delete(paperId);
+        }
+    }
+
+    closeModal(paperId) {
+        const modal = document.getElementById(`task-modal-${paperId}`);
+        if (modal) {
+            this.stopTracking(paperId);
+            modal.remove();
+            document.body.style.overflow = '';
+        }
     }
 }
 
@@ -327,10 +477,13 @@ class UploadManager {
 
             // Smart collection classification will happen automatically after metadata extraction completes
 
-            // Navigate to the paper details view immediately
+            // Show task progress modal immediately
+            if (paper && window.taskProgressManager) {
+                window.taskProgressManager.showTaskProgress(paper.id);
+            }
+
+            // Also refresh the papers list
             if (paper && window.paperManager) {
-                window.paperManager.showPaperDetailsWithExtraction(paper.id, taskId);
-                // Also refresh the papers list
                 window.paperManager.loadPapers();
             }
 

@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy import text, or_, and_
 from sqlalchemy.orm import Session
 
-from app.database.models import Paper, Collection, Tag
+from app.database.models import Paper, Collection
 from app.ai.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -104,16 +104,7 @@ class VectorSearchService:
             """
             params["collection_ids"] = collection_ids
         
-        # Add tag filter
-        if tag_ids:
-            sql += """
-                AND EXISTS (
-                    SELECT 1 FROM paper_tags pt 
-                    WHERE pt.paper_id = p.id 
-                    AND pt.tag_id = ANY(:tag_ids)
-                )
-            """
-            params["tag_ids"] = tag_ids
+        # Tag filter removed (tags feature disabled)
         
         # Add year filters
         if year_from:
@@ -193,8 +184,7 @@ class VectorSearchService:
         if collection_ids:
             q = q.join(Paper.collections).filter(Collection.id.in_(collection_ids))
         
-        if tag_ids:
-            q = q.join(Paper.tags).filter(Tag.id.in_(tag_ids))
+        # Tag filter removed (tags feature disabled)
         
         if year_from:
             q = q.filter(Paper.year >= year_from)

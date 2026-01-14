@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import text, and_, or_
 
-from app.database.models import Paper, Tag, Collection
+from app.database.models import Paper, Collection
 from app.ai.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -58,21 +58,7 @@ class VectorSimilarityStrategy(RecommendationStrategy):
             return 0.0
 
 
-class TagSimilarityStrategy(RecommendationStrategy):
-    """Recommend based on shared tags"""
-    
-    def calculate_score(self, target_paper: Paper, candidate: Paper, db: Session) -> float:
-        """Calculate Jaccard similarity of tags"""
-        target_tags = set(tag.id for tag in target_paper.tags)
-        candidate_tags = set(tag.id for tag in candidate.tags)
-        
-        if not target_tags or not candidate_tags:
-            return 0.0
-        
-        intersection = len(target_tags & candidate_tags)
-        union = len(target_tags | candidate_tags)
-        
-        return intersection / union if union > 0 else 0.0
+# TagSimilarityStrategy removed - tags feature disabled
 
 
 class CollectionSimilarityStrategy(RecommendationStrategy):
@@ -168,9 +154,9 @@ class RecommendationService:
     
     DEFAULT_STRATEGIES = [
         ("vector", VectorSimilarityStrategy(weight=0.5)),
-        ("tags", TagSimilarityStrategy(weight=0.2)),
-        ("collections", CollectionSimilarityStrategy(weight=0.15)),
-        ("authors", AuthorSimilarityStrategy(weight=0.1)),
+        # Tags strategy removed (tags feature disabled)
+        ("collections", CollectionSimilarityStrategy(weight=0.2)),
+        ("authors", AuthorSimilarityStrategy(weight=0.15)),
         ("year", YearProximityStrategy(weight=0.05))
     ]
     

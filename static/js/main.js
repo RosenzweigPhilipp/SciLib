@@ -203,6 +203,7 @@ class App {
         this.collectionManager = new CollectionManager();
         this.tagManager = new TagManager();
         this.uploadManager = new UploadManager();
+        this.taskProgressManager = new TaskProgressManager();
 
         // Make managers globally accessible for component interactions
         window.dashboardManager = this.dashboardManager;
@@ -210,6 +211,7 @@ class App {
         window.collectionManager = this.collectionManager;
         window.tagManager = this.tagManager;
         window.uploadManager = this.uploadManager;
+        window.taskProgressManager = this.taskProgressManager;
 
         console.log('DEBUG: Managers initialized', {
             dashboard: !!window.dashboardManager,
@@ -217,6 +219,7 @@ class App {
             collection: !!window.collectionManager,
             tag: !!window.tagManager,
             upload: !!window.uploadManager,
+            taskProgress: !!window.taskProgressManager,
         });
     }
 
